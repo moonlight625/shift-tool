@@ -11,8 +11,6 @@
 (function (global) {
   "use strict";
 
-  var KIND_KEY = { 1: "open", 2: "close", 3: "mid", 0: "other" };
-
   function summarize(model) {
     return model.dates.map(function (date, i) {
       var day = { date: date, open: [], close: [], mid: [], other: [] };
@@ -20,8 +18,17 @@
         var code = s.shifts[i];
         if (!code) return;
         var pattern = model.patterns[code] || null;
-        var kind = pattern ? pattern.kind : 0; // 未知記号は「その他」に入れる
-        day[KIND_KEY[kind] || "other"].push({ staff: s, code: code, pattern: pattern });
+        var entry = { staff: s, code: code, pattern: pattern };
+        // 分類はパターンの opens/closes(導出値)を使う。両方立つ人(フル等)は
+        // 開けと閉めの両方に数える。未知記号・J列=0は「その他」。
+        if (pattern && (pattern.opens || pattern.closes)) {
+          if (pattern.opens) day.open.push(entry);
+          if (pattern.closes) day.close.push(entry);
+        } else if (pattern && pattern.kind !== 0) {
+          day.mid.push(entry);
+        } else {
+          day.other.push(entry);
+        }
       });
       // 超早(記号が「超早」で始まるもの)は開け番に含めつつ別枠でも数える
       day.ultra = day.open.filter(function (e) {

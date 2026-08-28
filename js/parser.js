@@ -5,8 +5,14 @@
  * {
  *   month: "2025-07",
  *   dates: [Date, ...],                  // その月の日付列
- *   patterns: { "早": {start:"09:30", end:"19:00", kind:1, display:"早"}, ... }
- *                                        // kind: 1=開番 2=閉番 3=中番 0=その他
+ *   patterns: { "早": {start:"09:30", end:"19:00", kind:1, display:"早",
+ *                       opens:true, closes:false}, ... }
+ *     kind はマスタJ列の値(1=開番 2=閉番 3=中番 0=その他)だが、マスタには
+ *     誤登録があるため(例: 微早が閉番扱い)、開け/閉めの判定は導出した
+ *     opens/closes を使う:
+ *       opens  = 記号が「超早」「早」「微早」で始まる
+ *       closes = 終業が20:30以降(締めまでいる人)
+ *     どちらもJ列=0(会議・研修・有給など)は対象外。両方trueもあり得る(フル等)。
  *   staff: [ {cd, name, role, isKeyHolder, employment, shifts:[code|null,...]} ]
  *   unknownCodes: ["○○", ...]            // パターンマスタにない記号
  * }
@@ -50,11 +56,15 @@
       if (typeof name !== "string" || !name.trim()) continue;
       if (typeof start !== "number") continue; // ヘッダー行などを除外
       var kind = typeof row[9] === "number" ? row[9] : 0; // J列: 空欄は0扱い
-      patterns[name.trim()] = {
+      var key = name.trim();
+      var endStr = typeof row[3] === "number" ? serialToTimeStr(row[3]) : "";
+      patterns[key] = {
         start: serialToTimeStr(start),
-        end: typeof row[3] === "number" ? serialToTimeStr(row[3]) : "",
+        end: endStr,
         kind: kind,
-        display: typeof row[7] === "string" ? row[7].trim() : name.trim(),
+        display: typeof row[7] === "string" ? row[7].trim() : key,
+        opens: kind !== 0 && /^(超早|早|微早)/.test(key),
+        closes: kind !== 0 && endStr >= "20:30",
       };
     }
     return patterns;
