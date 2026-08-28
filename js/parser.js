@@ -58,12 +58,16 @@
       var kind = typeof row[9] === "number" ? row[9] : 0; // J列: 空欄は0扱い
       var key = name.trim();
       var endStr = typeof row[3] === "number" ? serialToTimeStr(row[3]) : "";
+      // 応援=他店勤務で自店にいない、流通便=荷受けのみで営業に参加しない
+      // → どちらも開け/閉め/中番には数えず「その他」扱い
+      if (/^(応援|流通便)/.test(key)) kind = 0;
       patterns[key] = {
         start: serialToTimeStr(start),
         end: endStr,
         kind: kind,
         display: typeof row[7] === "string" ? row[7].trim() : key,
-        opens: kind !== 0 && /^(超早|早|微早)/.test(key),
+        // フルは開けから締めまでいるので両方に該当させる
+        opens: kind !== 0 && /^(超早|早|微早|フル)/.test(key),
         closes: kind !== 0 && endStr >= "20:30",
       };
     }
