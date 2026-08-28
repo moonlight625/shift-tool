@@ -249,6 +249,7 @@ tr.wd-sat .td-date { color: var(--sat); }
   white-space: nowrap;
 }
 
+.count-ultra { background: #fbe0cc; color: #8a3c0f; }
 .count-open { background: var(--open-bg); color: var(--open-fg); }
 .count-mid { background: var(--mid-bg); color: var(--mid-fg); }
 .count-close { background: var(--close-bg); color: var(--close-fg); }

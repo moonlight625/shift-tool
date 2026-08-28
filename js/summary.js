@@ -23,8 +23,13 @@
         var kind = pattern ? pattern.kind : 0; // 未知記号は「その他」に入れる
         day[KIND_KEY[kind] || "other"].push({ staff: s, code: code, pattern: pattern });
       });
+      // 超早(記号が「超早」で始まるもの)は開け番に含めつつ別枠でも数える
+      day.ultra = day.open.filter(function (e) {
+        return e.code.indexOf("超早") === 0;
+      });
       day.counts = {
         open: day.open.length,
+        ultra: day.ultra.length,
         close: day.close.length,
         mid: day.mid.length,
         other: day.other.length,

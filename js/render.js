@@ -89,6 +89,9 @@
         cell.appendChild(el("div", "cal-none", "出勤なし"));
       } else {
         var counts = el("div", "cal-counts");
+        if (c.ultra > 0) {
+          counts.appendChild(el("span", "count count-ultra", "超早 " + c.ultra));
+        }
         counts.appendChild(el("span", "count count-open" + (c.open === 0 ? " count-zero" : ""), "開 " + c.open));
         counts.appendChild(el("span", "count count-mid", "中 " + c.mid));
         counts.appendChild(el("span", "count count-close" + (c.close === 0 ? " count-zero" : ""), "閉 " + c.close));
@@ -130,7 +133,11 @@
     groups.forEach(function (g) {
       if (!g[1].length) return;
       var sec = el("div", "detail-group " + g[2]);
-      sec.appendChild(el("h4", null, g[0] + "(" + g[1].length + "人)"));
+      var label = g[0] + "(" + g[1].length + "人";
+      if (g[2] === "g-open" && day.ultra.length > 0) {
+        label += "・うち超早" + day.ultra.length + "人";
+      }
+      sec.appendChild(el("h4", null, label + ")"));
       var list = el("div", "person-list");
       g[1].forEach(function (entry) {
         list.appendChild(nameChip(entry));
