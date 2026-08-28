@@ -164,11 +164,39 @@
     entries.forEach(function (e) {
       var chip = el("span", "person keyholder-cell");
       chip.appendChild(el("span", "person-name", e.staff.name));
-      chip.appendChild(
-        el("span", "person-time", e.pattern ? e.pattern.start + "出勤" : e.code)
-      );
+      chip.appendChild(el("span", "person-time", e.pattern ? e.pattern.start : e.code));
       td.appendChild(chip);
     });
+    return td;
+  }
+
+  // 鍵1本ぶんのセル: 「朝の持ち主 → 夜の持ち主」
+  function keyCell(pair, day) {
+    var td = el("td", "td-key");
+    var isOff = function (s) {
+      return day.offHolders.indexOf(s) !== -1;
+    };
+    var name = function (s, cls) {
+      var chip = el("span", "key-person " + (cls || ""));
+      chip.appendChild(el("span", null, s.name));
+      return chip;
+    };
+    if (!pair.morning && !pair.night) {
+      td.appendChild(el("span", "empty-mark", "―"));
+    } else if (pair.morning === pair.night) {
+      var s = pair.night;
+      if (isOff(s)) {
+        // 保持者が休み → 鍵は自宅に留まる
+        td.appendChild(name(s, "key-home"));
+        td.appendChild(el("span", "key-home-label", "(自宅)"));
+      } else {
+        td.appendChild(name(s));
+      }
+    } else {
+      td.appendChild(name(pair.morning));
+      td.appendChild(el("span", "key-arrow", "→"));
+      td.appendChild(name(pair.night, "key-recv"));
+    }
     return td;
   }
 
@@ -180,8 +208,8 @@
       el(
         "p",
         null,
-        "鍵を持てる人(店長・リーダー)がその日どこにいるかの一覧です。" +
-          "「夜の鍵の持ち主」は受け渡し案(自動計算)です。"
+        "鍵1〜3の列は受け渡し案(自動計算)です。「A → B」はその日の営業時間内にAからBへ渡し、" +
+          "Bが持ち帰る、という意味です。名前だけの日はその人が持ったまま。(自宅)は保持者が休みで鍵が動かせない日です。"
       )
     );
     container.appendChild(intro);
@@ -190,7 +218,7 @@
     var table = el("table", "keys-table");
     var thead = el("thead");
     var hr = el("tr");
-    ["日付", "開け", "中", "閉め", "夜の鍵の持ち主(案)", "注意"].forEach(function (h) {
+    ["日付", "開け", "閉め", "鍵1(店長キー)", "鍵2", "鍵3", "注意"].forEach(function (h) {
       hr.appendChild(el("th", null, h));
     });
     thead.appendChild(hr);
@@ -203,17 +231,10 @@
 
       tr.appendChild(el("td", "td-date", fmtDate(day.date)));
       tr.appendChild(holderCell(day.openHolders, true));
-      tr.appendChild(holderCell(day.midHolders, false));
       tr.appendChild(holderCell(day.closeHolders, true));
-
-      var carryTd = el("td", "td-carry");
-      day.carry.forEach(function (holder, k) {
-        var chip = el("span", "carry-chip carry-" + (k + 1));
-        chip.appendChild(el("span", "carry-label", k === 0 ? "鍵1(店長)" : "鍵" + (k + 1)));
-        chip.appendChild(el("span", "carry-name", holder ? holder.name : "―"));
-        carryTd.appendChild(chip);
+      day.keys.forEach(function (pair) {
+        tr.appendChild(keyCell(pair, day));
       });
-      tr.appendChild(carryTd);
 
       var warnTd = el("td", "td-warn");
       day.warnings.forEach(function (w) {

@@ -12,7 +12,9 @@
  *   { date,
  *     openHolders / closeHolders / midHolders: [{staff, code, pattern}],
  *     offHolders: [staff],
- *     carry: [staff|null, staff|null, staff|null],  // その夜の各鍵の保持者(鍵1=店長キー)
+ *     keys: [{morning: staff|null, night: staff|null} ×3],  // 鍵1=店長キー。
+ *           // morning=朝の時点の持ち主(前夜の持ち帰り)、night=その夜の持ち帰り先(案)
+ *     carry: [staff|null ×3],  // keys[].night と同じ(互換用)
  *     warnings: [string] }
  * ]
  * (days は ShiftSummary.summarize(model) の結果)
@@ -79,6 +81,8 @@
         }
       }
 
+      var morning = holders.slice();
+
       // 夜の持ち帰り先を決める
       if (storeOpen) {
         var next = days[i + 1] || null;
@@ -127,6 +131,9 @@
         closeHolders: closeKH,
         midHolders: midKH,
         offHolders: offKH,
+        keys: morning.map(function (m, k) {
+          return { morning: m, night: holders[k] };
+        }),
         carry: holders.slice(),
         warnings: warnings,
       };
