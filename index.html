@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex">
+  <title>シフトツール</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🗓️</text></svg>">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <h1>シフトツール</h1>
+    <span id="month-label" class="month-label"></span>
+    <div class="header-actions">
+      <button id="print-btn" class="btn" hidden>🖨 印刷</button>
+      <button id="reload-btn" class="btn btn-ghost">別のファイルを開く</button>
+    </div>
+  </header>
+
+  <section id="upload-section" class="upload-section">
+    <div id="dropzone" class="dropzone">
+      <div class="dropzone-icon">📂</div>
+      <p class="dropzone-main">ここにシフトのExcelファイルを<br>ドラッグ&ドロップ</p>
+      <p class="dropzone-sub">またはクリックしてファイルを選択</p>
+      <input type="file" id="file-input" accept=".xlsx,.xls" hidden>
+    </div>
+    <p class="privacy-note">🔒 ファイルはこのブラウザの中だけで処理されます。データがどこかに送信されることはありません。</p>
+    <div id="error-box" class="banner banner-error" hidden></div>
+  </section>
+
+  <main id="app-main" hidden>
+    <nav class="tabs">
+      <button class="tab active" data-view="summary">👥 人数の確認</button>
+      <button class="tab" data-view="keys">🔑 鍵の受け渡し</button>
+    </nav>
+    <section id="view-summary" class="view"></section>
+    <section id="view-keys" class="view" hidden></section>
+  </main>
+
+  <script src="vendor/xlsx.full.min.js"></script>
+  <script src="js/parser.js"></script>
+  <script src="js/summary.js"></script>
+  <script src="js/keys.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+# 実物のシフトExcel(個人情報を含む)は絶対にコミットしない
+*.xlsx
+# ダミーデータのサンプルのみ許可
+!sample/sample.xlsx
+
+.DS_Store
