@@ -6,7 +6,7 @@
  *   - 鍵は当日出勤している鍵保持者にしか渡せない(営業時間内の受け渡し)。
  *     保持者が休みの日は鍵は自宅に留まる
  *   - 持ち帰り先の優先順位: ①翌日開け番に入る人 ②当日の閉め番 ③その他の出勤鍵保持者
- *   - 3本はなるべく別々の人に分散させる
+ *   - 1人が同時に持てる鍵は1本まで(受け取り手が足りない鍵は現保持者に残す)
  *
  * analyzeKeys(model, days, preferredCds) → [
  *   preferredCds: 優先して鍵を持たせる人のCD配列(省略可)。指定すると、
@@ -138,23 +138,20 @@
               return a;
             });
           };
-          // 受け取り手を決める。1人目は翌朝カバー最優先(score)、
-          // 2人目以降は「優先者 > 分散 > score」— 優先者が足りない日だけ他へ。
+          // 受け取り手を決める。1人が持てる鍵は同時に1本まで(重複禁止)。
+          // 1人目は翌朝カバー最優先(score)、2人目以降は「優先者 > score」。
+          // 受け取り手が足りない鍵は現保持者に残す。
           var recipients = [];
-          var cnt = function (s) {
-            return recipients.filter(function (r) {
-              return r === s;
-            }).length;
-          };
-          recipients.push(
-            minBy(candidates, function (s) {
-              return [score(s)];
-            })
-          );
           while (recipients.length < movable.length) {
+            var avail = candidates.filter(function (s) {
+              return recipients.indexOf(s) === -1;
+            });
+            if (avail.length === 0) break;
             recipients.push(
-              minBy(candidates, function (s) {
-                return [hasPref && !pref[s.cd] ? 1 : 0, cnt(s), score(s)];
+              minBy(avail, function (s) {
+                return recipients.length === 0
+                  ? [score(s)]
+                  : [hasPref && !pref[s.cd] ? 1 : 0, score(s)];
               })
             );
           }
