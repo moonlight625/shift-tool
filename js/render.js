@@ -170,14 +170,64 @@
     return td;
   }
 
+  // その日出勤している鍵保持者(重複なし)
+  function workingKeyholders(day) {
+    var seen = {};
+    var list = [];
+    [day.openHolders, day.midHolders, day.closeHolders].forEach(function (g) {
+      g.forEach(function (e) {
+        if (!seen[e.staff.cd]) {
+          seen[e.staff.cd] = true;
+          list.push(e.staff);
+        }
+      });
+    });
+    return list;
+  }
+
+  // セル内に「この夜の持ち帰り先」を選ぶドロップダウンを開く
+  function openKeyEditor(td, pair, day, dayIndex, keyIndex, opts) {
+    if (td.querySelector("select")) return;
+    var sel = document.createElement("select");
+    sel.className = "key-select";
+    var optAuto = document.createElement("option");
+    optAuto.value = "";
+    optAuto.textContent = "(自動にまかせる)";
+    sel.appendChild(optAuto);
+    workingKeyholders(day).forEach(function (s) {
+      var o = document.createElement("option");
+      o.value = String(s.cd);
+      o.textContent = s.name;
+      if (pair.manual && pair.night === s) o.selected = true;
+      sel.appendChild(o);
+    });
+    // 休みの鍵保持者も選べる(店外で受け渡す場合の記録用)
+    day.offHolders.forEach(function (s) {
+      var o = document.createElement("option");
+      o.value = String(s.cd);
+      o.textContent = s.name + "(休み・店外で受け渡し)";
+      if (pair.manual && pair.night === s) o.selected = true;
+      sel.appendChild(o);
+    });
+    sel.addEventListener("click", function (e) {
+      e.stopPropagation();
+    });
+    sel.addEventListener("change", function () {
+      opts.onOverride(dayIndex, keyIndex, sel.value ? Number(sel.value) : null);
+    });
+    td.appendChild(sel);
+    sel.focus();
+  }
+
   // 鍵1本ぶんのセル: 「朝の持ち主 → 夜の持ち主」
-  function keyCell(pair, day) {
+  function keyCell(pair, day, dayIndex, keyIndex, opts) {
     var td = el("td", "td-key");
     var isOff = function (s) {
       return day.offHolders.indexOf(s) !== -1;
     };
     var name = function (s, cls) {
       var chip = el("span", "key-person " + (cls || ""));
+      if (pair.manual && s === pair.night) chip.appendChild(el("span", "key-pin", "📌"));
       chip.appendChild(el("span", null, s.name));
       return chip;
     };
@@ -196,6 +246,14 @@
       td.appendChild(name(pair.morning));
       td.appendChild(el("span", "key-arrow", "→"));
       td.appendChild(name(pair.night, "key-recv"));
+    }
+    if (pair.editable && opts.onOverride) {
+      td.classList.add("td-key-edit");
+      td.title = "クリックで、この夜の持ち帰り先を変更";
+      td.addEventListener("click", function (e) {
+        if (e.target.tagName === "SELECT" || e.target.tagName === "OPTION") return;
+        openKeyEditor(td, pair, day, dayIndex, keyIndex, opts);
+      });
     }
     return td;
   }
@@ -237,10 +295,11 @@
     return panel;
   }
 
-  function renderKeys(model, keyDays, container, preferredCds, onPrefsChange) {
+  function renderKeys(model, keyDays, container, opts) {
     container.textContent = "";
+    opts = opts || {};
 
-    container.appendChild(prefPanel(model, preferredCds || [], onPrefsChange));
+    container.appendChild(prefPanel(model, opts.preferredCds || [], opts.onPrefsChange));
 
     var intro = el("div", "keys-intro");
     intro.appendChild(
@@ -248,10 +307,20 @@
         "p",
         null,
         "鍵1〜3の列は受け渡し案(自動計算)です。「A → B」はその日の営業時間内にAからBへ渡し、" +
-          "Bが持ち帰る、という意味です。名前だけの日はその人が持ったまま。(自宅)は保持者が休みで鍵が動かせない日です。"
+          "Bが持ち帰る、という意味です。名前だけの日はその人が持ったまま。(自宅)は保持者が休みで鍵が動かせない日です。" +
+          "鍵のセルをクリックすると、その夜の持ち帰り先を手動で選べます(それ以降の日は自動で計算し直されます)。"
       )
     );
     container.appendChild(intro);
+
+    if (opts.overrideCount > 0) {
+      var bar = el("div", "override-bar");
+      bar.appendChild(el("span", null, "📌 手動変更 " + opts.overrideCount + "件"));
+      var resetBtn = el("button", "btn btn-ghost", "手動変更をすべてリセット");
+      resetBtn.addEventListener("click", opts.onResetOverrides);
+      bar.appendChild(resetBtn);
+      container.appendChild(bar);
+    }
 
     var wrap = el("div", "table-wrap");
     var table = el("table", "keys-table");
@@ -264,15 +333,15 @@
     table.appendChild(thead);
 
     var tbody = el("tbody");
-    keyDays.forEach(function (day) {
+    keyDays.forEach(function (day, dayIndex) {
       var tr = el("tr", wdClass(day.date));
       if (day.warnings.length) tr.classList.add("row-warn");
 
       tr.appendChild(el("td", "td-date", fmtDate(day.date)));
       tr.appendChild(holderCell(day.openHolders, true));
       tr.appendChild(holderCell(day.closeHolders, true));
-      day.keys.forEach(function (pair) {
-        tr.appendChild(keyCell(pair, day));
+      day.keys.forEach(function (pair, keyIndex) {
+        tr.appendChild(keyCell(pair, day, dayIndex, keyIndex, opts));
       });
 
       var warnTd = el("td", "td-warn");

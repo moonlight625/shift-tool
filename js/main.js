@@ -35,6 +35,28 @@
     }
   }
 
+  // 鍵の手動上書き {"<日index>-<鍵index>": cd} は月ごとに保存する
+  function overridesKey(month) {
+    return "shift-tool-key-overrides-" + month;
+  }
+
+  function loadOverrides(month) {
+    try {
+      var v = JSON.parse(localStorage.getItem(overridesKey(month)));
+      return v && typeof v === "object" ? v : {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function saveOverrides(month, obj) {
+    try {
+      localStorage.setItem(overridesKey(month), JSON.stringify(obj));
+    } catch (e) {
+      /* 保存できなくても動作は継続 */
+    }
+  }
+
   function showError(message) {
     errorBox.textContent = message;
     errorBox.hidden = false;
@@ -61,15 +83,35 @@
 
         ShiftRender.renderSummary(model, days, viewSummary);
 
-        // 優先保持者の選択は鍵ビュー内のチェックボックスで変更でき、
+        // 優先保持者と手動上書きは鍵ビュー内で変更でき、
         // 変えるたびに受け渡し案を計算し直す
         var prefs = loadPrefs();
+        var overrides = loadOverrides(model.month);
         var renderKeysView = function () {
-          var keyDays = ShiftKeys.analyzeKeys(model, days, prefs);
-          ShiftRender.renderKeys(model, keyDays, viewKeys, prefs, function (cds) {
-            prefs = cds;
-            savePrefs(cds);
-            renderKeysView();
+          var keyDays = ShiftKeys.analyzeKeys(model, days, prefs, overrides);
+          ShiftRender.renderKeys(model, keyDays, viewKeys, {
+            preferredCds: prefs,
+            onPrefsChange: function (cds) {
+              prefs = cds;
+              savePrefs(cds);
+              renderKeysView();
+            },
+            overrideCount: Object.keys(overrides).length,
+            onOverride: function (dayIndex, keyIndex, cd) {
+              var key = dayIndex + "-" + keyIndex;
+              if (cd === null) {
+                delete overrides[key];
+              } else {
+                overrides[key] = cd;
+              }
+              saveOverrides(model.month, overrides);
+              renderKeysView();
+            },
+            onResetOverrides: function () {
+              overrides = {};
+              saveOverrides(model.month, overrides);
+              renderKeysView();
+            },
           });
         };
         renderKeysView();

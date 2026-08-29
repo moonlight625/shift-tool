@@ -8,9 +8,12 @@
  *   - 持ち帰り先の優先順位: ①翌日開け番に入る人 ②当日の閉め番 ③その他の出勤鍵保持者
  *   - 1人が同時に持てる鍵は1本まで(受け取り手が足りない鍵は現保持者に残す)
  *
- * analyzeKeys(model, days, preferredCds) → [
+ * analyzeKeys(model, days, preferredCds, overrides) → [
  *   preferredCds: 優先して鍵を持たせる人のCD配列(省略可)。指定すると、
  *   翌朝の開け番カバーに支障がない限り鍵をその人たちに集める。
+ *   overrides: 手動上書き {"<日index>-<鍵index>": cd}(省略可)。その夜の
+ *   その鍵の持ち帰り先を固定し、以降の日は上書きを前提に自動計算し直す。
+ *   指定された人がその日出勤していなければ無視される。
  *
  *   { date,
  *     openHolders / closeHolders / midHolders: [{staff, code, pattern}],
@@ -27,7 +30,7 @@
 
   var NUM_KEYS = 3;
 
-  function analyzeKeys(model, days, preferredCds) {
+  function analyzeKeys(model, days, preferredCds, overrides) {
     var keyholders = model.staff.filter(function (s) {
       return s.isKeyHolder;
     });
@@ -94,6 +97,8 @@
       }
 
       var morning = holders.slice();
+      var manualFlags = {}; // この夜、手動上書きが効いた鍵
+      var editableSet = {}; // この夜、動かせる(=UIで変更できる)鍵
 
       // 夜の持ち帰り先を決める
       if (storeOpen) {
@@ -138,18 +143,47 @@
               return a;
             });
           };
-          // 受け取り手を決める。1人が持てる鍵は同時に1本まで(重複禁止)。
-          // 1人目は翌朝カバー最優先(score)、2人目以降は「優先者 > score」。
-          // 受け取り手が足りない鍵は現保持者に残す。
+          movable.forEach(function (k) {
+            editableSet[k] = true;
+          });
+
+          // 手動上書きを先に確定(重複は不可)。休みの鍵保持者への指定も
+          // 許可する = 店外での受け渡しを人間が決めた、という記録
+          var assignment = {};
+          var taken = [];
+          movable.forEach(function (k) {
+            var cd = overrides ? overrides[i + "-" + k] : undefined;
+            if (cd === undefined || cd === null) return;
+            var s = keyholders.find(function (c) {
+              return c.cd === cd && taken.indexOf(c) === -1;
+            });
+            if (s) {
+              assignment[k] = s;
+              taken.push(s);
+              manualFlags[k] = true;
+            }
+          });
+          var autoKeys = movable.filter(function (k) {
+            return assignment[k] === undefined;
+          });
+
+          // 残りの鍵の受け取り手を自動で決める。1人が持てる鍵は同時に1本まで。
+          // 翌朝カバーがまだ確保できていなければそれを最優先(score)、
+          // 以降は「優先者 > score」。受け取り手が足りない鍵は現保持者に残す。
           var recipients = [];
-          while (recipients.length < movable.length) {
+          var covered = function (list) {
+            return list.some(function (s) {
+              return opensTomorrow[s.cd];
+            });
+          };
+          while (recipients.length < autoKeys.length) {
             var avail = candidates.filter(function (s) {
-              return recipients.indexOf(s) === -1;
+              return taken.indexOf(s) === -1 && recipients.indexOf(s) === -1;
             });
             if (avail.length === 0) break;
             recipients.push(
               minBy(avail, function (s) {
-                return recipients.length === 0
+                return !covered(taken) && !covered(recipients)
                   ? [score(s)]
                   : [hasPref && !pref[s.cd] ? 1 : 0, score(s)];
               })
@@ -157,16 +191,17 @@
           }
           // 鍵→受け取り手の対応付け(今の保持者が受け取り手なら動かさない)
           var remaining = recipients.slice();
-          var assignment = {};
-          movable.forEach(function (k) {
+          autoKeys.forEach(function (k) {
             var prev = holders[k];
             var idx = prev ? remaining.indexOf(prev) : -1;
             if (idx !== -1) assignment[k] = remaining.splice(idx, 1)[0];
           });
-          movable.forEach(function (k) {
+          autoKeys.forEach(function (k) {
             if (assignment[k] === undefined) {
               assignment[k] = remaining.shift() || holders[k];
             }
+          });
+          movable.forEach(function (k) {
             holders[k] = assignment[k];
           });
         }
@@ -179,7 +214,12 @@
         midHolders: midKH,
         offHolders: offKH,
         keys: morning.map(function (m, k) {
-          return { morning: m, night: holders[k] };
+          return {
+            morning: m,
+            night: holders[k],
+            manual: !!manualFlags[k],
+            editable: !!editableSet[k],
+          };
         }),
         carry: holders.slice(),
         warnings: warnings,

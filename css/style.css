@@ -401,6 +401,29 @@ tr.wd-sat .td-date { color: var(--sat); }
 
 .td-key { white-space: nowrap; }
 
+.td-key-edit { cursor: pointer; }
+
+.td-key-edit:hover { background: #f2f6ff; }
+
+.key-pin { font-size: 0.8rem; margin-right: 0.2rem; }
+
+.key-select {
+  display: block;
+  margin-top: 0.3rem;
+  font-size: 0.9rem;
+  padding: 0.15rem 0.3rem;
+  border-radius: 6px;
+  border: 1px solid var(--accent);
+}
+
+.override-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin: 0 0 0.8rem;
+  font-weight: 700;
+}
+
 .key-person {
   display: inline-block;
   font-weight: 700;
@@ -434,7 +457,8 @@ tr.wd-sat .td-date { color: var(--sat); }
 /* ---------- 印刷(鍵受渡表を貼り出す用) ---------- */
 
 @media print {
-  .site-header, .tabs, .upload-section, .hint, .keys-intro, .pref-panel { display: none !important; }
+  .site-header, .tabs, .upload-section, .hint, .keys-intro, .pref-panel,
+  .override-bar, .key-select { display: none !important; }
   body { background: #fff; }
   main { padding: 0; max-width: none; }
   #view-summary { display: none !important; }
