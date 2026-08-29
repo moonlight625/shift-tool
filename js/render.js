@@ -200,8 +200,47 @@
     return td;
   }
 
-  function renderKeys(model, keyDays, container) {
+  // 優先保持者を選ぶチェックボックスパネル
+  function prefPanel(model, preferredCds, onPrefsChange) {
+    var panel = el("div", "pref-panel");
+    panel.appendChild(el("h3", null, "優先して鍵を持つ人"));
+    panel.appendChild(
+      el(
+        "p",
+        "pref-hint",
+        "チェックした人に鍵をなるべく集めます(その人たちで回せない日だけ他の人に受け渡します)。設定はこのブラウザに保存されます。"
+      )
+    );
+    var list = el("div", "pref-list");
+    model.staff
+      .filter(function (s) {
+        return s.isKeyHolder;
+      })
+      .forEach(function (s) {
+        var label = el("label", "pref-item");
+        var cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.value = String(s.cd);
+        cb.checked = preferredCds.indexOf(s.cd) !== -1;
+        cb.addEventListener("change", function () {
+          var cds = [];
+          list.querySelectorAll("input:checked").forEach(function (i) {
+            cds.push(Number(i.value));
+          });
+          onPrefsChange(cds);
+        });
+        label.appendChild(cb);
+        label.appendChild(el("span", null, s.name + (s.role ? "(" + s.role + ")" : "")));
+        list.appendChild(label);
+      });
+    panel.appendChild(list);
+    return panel;
+  }
+
+  function renderKeys(model, keyDays, container, preferredCds, onPrefsChange) {
     container.textContent = "";
+
+    container.appendChild(prefPanel(model, preferredCds || [], onPrefsChange));
 
     var intro = el("div", "keys-intro");
     intro.appendChild(

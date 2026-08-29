@@ -15,6 +15,26 @@
   var printBtn = document.getElementById("print-btn");
   var reloadBtn = document.getElementById("reload-btn");
 
+  // 優先保持者(CDの配列)はブラウザに保存する。名前は保存しない
+  var PREF_STORAGE_KEY = "shift-tool-preferred-cds";
+
+  function loadPrefs() {
+    try {
+      var v = JSON.parse(localStorage.getItem(PREF_STORAGE_KEY));
+      return Array.isArray(v) ? v : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function savePrefs(cds) {
+    try {
+      localStorage.setItem(PREF_STORAGE_KEY, JSON.stringify(cds));
+    } catch (e) {
+      /* プライベートブラウジング等で保存できなくても動作は継続 */
+    }
+  }
+
   function showError(message) {
     errorBox.textContent = message;
     errorBox.hidden = false;
@@ -35,13 +55,24 @@
       try {
         var model = ShiftParser.parseWorkbook(new Uint8Array(e.target.result));
         var days = ShiftSummary.summarize(model);
-        var keyDays = ShiftKeys.analyzeKeys(model, days);
 
         var parts = model.month.split("-");
         monthLabel.textContent = parts[0] + "年" + Number(parts[1]) + "月のシフト";
 
         ShiftRender.renderSummary(model, days, viewSummary);
-        ShiftRender.renderKeys(model, keyDays, viewKeys);
+
+        // 優先保持者の選択は鍵ビュー内のチェックボックスで変更でき、
+        // 変えるたびに受け渡し案を計算し直す
+        var prefs = loadPrefs();
+        var renderKeysView = function () {
+          var keyDays = ShiftKeys.analyzeKeys(model, days, prefs);
+          ShiftRender.renderKeys(model, keyDays, viewKeys, prefs, function (cds) {
+            prefs = cds;
+            savePrefs(cds);
+            renderKeysView();
+          });
+        };
+        renderKeysView();
 
         document.body.classList.add("loaded");
         appMain.hidden = false;

@@ -8,7 +8,10 @@
  *   - 持ち帰り先の優先順位: ①翌日開け番に入る人 ②当日の閉め番 ③その他の出勤鍵保持者
  *   - 3本はなるべく別々の人に分散させる
  *
- * analyzeKeys(model, days) → [
+ * analyzeKeys(model, days, preferredCds) → [
+ *   preferredCds: 優先して鍵を持たせる人のCD配列(省略可)。指定すると、
+ *   翌朝の開け番カバーに支障がない限り鍵をその人たちに集める。
+ *
  *   { date,
  *     openHolders / closeHolders / midHolders: [{staff, code, pattern}],
  *     offHolders: [staff],
@@ -24,19 +27,28 @@
 
   var NUM_KEYS = 3;
 
-  function analyzeKeys(model, days) {
+  function analyzeKeys(model, days, preferredCds) {
     var keyholders = model.staff.filter(function (s) {
       return s.isKeyHolder;
     });
+    var pref = {};
+    (preferredCds || []).forEach(function (cd) {
+      pref[cd] = true;
+    });
+    var hasPref = (preferredCds || []).length > 0;
 
-    // 初期配置: 鍵1=店長、残りをリーダーに順番に
+    // 初期配置: 鍵1=店長、残りを優先者→その他の順でリーダーに
     var holders = [];
     var manager = keyholders.find(function (s) {
       return s.role.indexOf("店長") !== -1;
     });
-    var others = keyholders.filter(function (s) {
-      return s !== manager;
-    });
+    var others = keyholders
+      .filter(function (s) {
+        return s !== manager;
+      })
+      .sort(function (a, b) {
+        return (pref[b.cd] ? 1 : 0) - (pref[a.cd] ? 1 : 0);
+      });
     holders[0] = manager || others[0] || null;
     for (var k = 1; k < NUM_KEYS; k++) {
       holders[k] = others[k - 1] || null;
@@ -99,30 +111,68 @@
         var candidates = keyholders.filter(function (s) {
           return workingSet[s.cd];
         });
-        // スコアが小さいほど優先: 翌日開け番 > 当日閉め番 > その他
+        // スコアが小さいほど優先: 翌日開け番 > 優先保持者 > 当日閉め番。
+        // 翌朝の開けを最重視しつつ、それ以外では優先者に鍵を集める
+        // (優先者で回せない日だけ他の人に流れる)。
         var score = function (s) {
-          return (opensTomorrow[s.cd] ? 0 : 2) + (closesToday[s.cd] ? 0 : 1);
+          return (
+            (opensTomorrow[s.cd] ? 0 : 4) +
+            (hasPref && !pref[s.cd] ? 2 : 0) +
+            (closesToday[s.cd] ? 0 : 1)
+          );
         };
-        var assigned = []; // この夜すでに鍵を割り当てた人(分散用)
-        var countAssigned = function (s) {
-          return assigned.filter(function (a) {
-            return a === s;
-          }).length;
-        };
-        holders = holders.map(function (prev) {
-          if (prev && !workingSet[prev.cd]) return prev; // 保持者が休み → 鍵は自宅のまま
-          if (candidates.length === 0) return prev;
-          var best = candidates.reduce(function (a, b) {
-            var ka = [countAssigned(a), score(a), a === prev ? 0 : 1];
-            var kb = [countAssigned(b), score(b), b === prev ? 0 : 1];
-            for (var j = 0; j < ka.length; j++) {
-              if (ka[j] !== kb[j]) return ka[j] < kb[j] ? a : b;
-            }
-            return a;
-          });
-          assigned.push(best);
-          return best;
+        // 動かせる鍵(保持者が休みの鍵は自宅から動かせない)
+        var movable = [];
+        holders.forEach(function (prev, k) {
+          if (!prev || workingSet[prev.cd]) movable.push(k);
         });
+
+        if (candidates.length && movable.length) {
+          var minBy = function (list, keyFn) {
+            return list.reduce(function (a, b) {
+              var ka = keyFn(a);
+              var kb = keyFn(b);
+              for (var j = 0; j < ka.length; j++) {
+                if (ka[j] !== kb[j]) return ka[j] < kb[j] ? a : b;
+              }
+              return a;
+            });
+          };
+          // 受け取り手を決める。1人目は翌朝カバー最優先(score)、
+          // 2人目以降は「優先者 > 分散 > score」— 優先者が足りない日だけ他へ。
+          var recipients = [];
+          var cnt = function (s) {
+            return recipients.filter(function (r) {
+              return r === s;
+            }).length;
+          };
+          recipients.push(
+            minBy(candidates, function (s) {
+              return [score(s)];
+            })
+          );
+          while (recipients.length < movable.length) {
+            recipients.push(
+              minBy(candidates, function (s) {
+                return [hasPref && !pref[s.cd] ? 1 : 0, cnt(s), score(s)];
+              })
+            );
+          }
+          // 鍵→受け取り手の対応付け(今の保持者が受け取り手なら動かさない)
+          var remaining = recipients.slice();
+          var assignment = {};
+          movable.forEach(function (k) {
+            var prev = holders[k];
+            var idx = prev ? remaining.indexOf(prev) : -1;
+            if (idx !== -1) assignment[k] = remaining.splice(idx, 1)[0];
+          });
+          movable.forEach(function (k) {
+            if (assignment[k] === undefined) {
+              assignment[k] = remaining.shift() || holders[k];
+            }
+            holders[k] = assignment[k];
+          });
+        }
       }
 
       return {
