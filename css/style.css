@@ -484,6 +484,19 @@ tr.wd-sat .td-date { color: var(--sat); }
 
 .key-arrow { margin: 0 0.35rem; color: var(--accent); font-weight: 700; }
 
+/* ---------- フッター ---------- */
+
+.site-footer {
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.85rem;
+  padding: 1.2rem 1rem 2rem;
+}
+
+.site-footer a { color: var(--muted); }
+
+.footer-sep { margin: 0 0.4rem; }
+
 /* ---------- スマホ対応 ---------- */
 
 @media (max-width: 640px) {
@@ -498,7 +511,7 @@ tr.wd-sat .td-date { color: var(--sat); }
 
 @media print {
   .site-header, .tabs, .upload-section, .hint, .keys-intro, .pref-panel,
-  .override-bar, .key-select { display: none !important; }
+  .override-bar, .key-select, .site-footer { display: none !important; }
   body { background: #fff; }
   main { padding: 0; max-width: none; }
   #view-summary { display: none !important; }
