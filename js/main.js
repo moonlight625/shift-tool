@@ -15,46 +15,36 @@
   var printBtn = document.getElementById("print-btn");
   var reloadBtn = document.getElementById("reload-btn");
 
-  // 優先保持者(CDの配列)はブラウザに保存する。名前は保存しない
-  var PREF_STORAGE_KEY = "shift-tool-preferred-cds";
-
-  function loadPrefs() {
+  // 設定はすべてCD(担当者番号)ベースでブラウザに保存する(名前は保存しない)。
+  // 複数店舗で使えるよう、保存キーは店番でスコープする
+  function loadJSON(key, fallbackKey, def) {
     try {
-      var v = JSON.parse(localStorage.getItem(PREF_STORAGE_KEY));
-      return Array.isArray(v) ? v : [];
+      var v = JSON.parse(localStorage.getItem(key));
+      if (v === null && fallbackKey) v = JSON.parse(localStorage.getItem(fallbackKey));
+      return v === null || v === undefined ? def : v;
     } catch (e) {
-      return [];
+      return def;
     }
   }
 
-  function savePrefs(cds) {
+  function saveJSON(key, val) {
     try {
-      localStorage.setItem(PREF_STORAGE_KEY, JSON.stringify(cds));
+      localStorage.setItem(key, JSON.stringify(val));
     } catch (e) {
       /* プライベートブラウジング等で保存できなくても動作は継続 */
     }
   }
 
-  // 鍵の手動上書き {"<日index>-<鍵index>": cd} は月ごとに保存する
-  function overridesKey(month) {
-    return "shift-tool-key-overrides-" + month;
-  }
-
-  function loadOverrides(month) {
-    try {
-      var v = JSON.parse(localStorage.getItem(overridesKey(month)));
-      return v && typeof v === "object" ? v : {};
-    } catch (e) {
-      return {};
-    }
-  }
-
-  function saveOverrides(month, obj) {
-    try {
-      localStorage.setItem(overridesKey(month), JSON.stringify(obj));
-    } catch (e) {
-      /* 保存できなくても動作は継続 */
-    }
+  function storageKeys(model) {
+    var sid = model.storeId || "default";
+    return {
+      prefs: "shift-tool-prefs-" + sid,
+      prefsOld: "shift-tool-preferred-cds", // 旧バージョンからの引き継ぎ用
+      extra: "shift-tool-extra-keyholders-" + sid,
+      initial: "shift-tool-initial-" + sid + "-" + model.month,
+      overrides: "shift-tool-key-overrides-" + sid + "-" + model.month,
+      overridesOld: "shift-tool-key-overrides-" + model.month,
+    };
   }
 
   function showError(message) {
@@ -81,19 +71,54 @@
         var parts = model.month.split("-");
         monthLabel.textContent = parts[0] + "年" + Number(parts[1]) + "月のシフト";
 
+        // 鍵まわりの設定は鍵ビュー内で変更でき、変えるたびに計画を計算し直す
+        var keys = storageKeys(model);
+        var prefs = loadJSON(keys.prefs, keys.prefsOld, []);
+        var overrides = loadJSON(keys.overrides, keys.overridesOld, {});
+        var initialCds = loadJSON(keys.initial, null, [null, null, null]);
+        var extraCds = loadJSON(keys.extra, null, []);
+
+        var applyExtras = function () {
+          model.staff.forEach(function (s) {
+            s.isKeyHolder = s.isRoleKeyHolder || extraCds.indexOf(s.cd) !== -1;
+          });
+        };
+        applyExtras();
+
         ShiftRender.renderSummary(model, days, viewSummary);
 
-        // 優先保持者と手動上書きは鍵ビュー内で変更でき、
-        // 変えるたびに受け渡し案を計算し直す
-        var prefs = loadPrefs();
-        var overrides = loadOverrides(model.month);
         var renderKeysView = function () {
-          var keyDays = ShiftKeys.analyzeKeys(model, days, prefs, overrides);
+          var keyDays = ShiftKeys.analyzeKeys(model, days, {
+            preferredCds: prefs,
+            overrides: overrides,
+            initialCds: initialCds,
+          });
           ShiftRender.renderKeys(model, keyDays, viewKeys, {
             preferredCds: prefs,
             onPrefsChange: function (cds) {
               prefs = cds;
-              savePrefs(cds);
+              saveJSON(keys.prefs, cds);
+              renderKeysView();
+            },
+            initialCds: initialCds,
+            onInitialChange: function (k, cd) {
+              if (cd !== null) {
+                // 同じ人を2本に指定したら、先に指定していた側を解除する
+                initialCds = initialCds.map(function (v, j) {
+                  return j !== k && v === cd ? null : v;
+                });
+              }
+              initialCds[k] = cd;
+              saveJSON(keys.initial, initialCds);
+              renderKeysView();
+            },
+            extraCds: extraCds,
+            onExtraChange: function (cds) {
+              extraCds = cds;
+              saveJSON(keys.extra, cds);
+              applyExtras();
+              // 🔑マークが変わるので人数ビューも描き直す
+              ShiftRender.renderSummary(model, days, viewSummary);
               renderKeysView();
             },
             overrideCount: Object.keys(overrides).length,
@@ -104,12 +129,12 @@
               } else {
                 overrides[key] = cd;
               }
-              saveOverrides(model.month, overrides);
+              saveJSON(keys.overrides, overrides);
               renderKeysView();
             },
             onResetOverrides: function () {
               overrides = {};
-              saveOverrides(model.month, overrides);
+              saveJSON(keys.overrides, overrides);
               renderKeysView();
             },
           });

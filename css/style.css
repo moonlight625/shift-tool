@@ -323,7 +323,47 @@ tr.wd-sat .td-date { color: var(--sat); }
   margin-bottom: 1rem;
 }
 
-.pref-panel h3 { margin: 0 0 0.2rem; font-size: 1.05rem; }
+.settings-summary {
+  font-size: 1.05rem;
+  font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+}
+
+.settings-h { margin: 1rem 0 0.2rem; font-size: 1rem; }
+
+.pref-rank { color: var(--open-fg); font-weight: 700; }
+
+.init-row { display: flex; flex-wrap: wrap; gap: 0.8rem; }
+
+.init-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 700;
+}
+
+.init-item select,
+.holder-add {
+  font-size: 0.95rem;
+  padding: 0.25rem 0.4rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.holder-fixed { opacity: 0.75; cursor: default; }
+
+.holder-chip { cursor: default; }
+
+.holder-remove {
+  border: none;
+  background: none;
+  color: var(--warn-fg);
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0 0.1rem;
+}
 
 .pref-hint { margin: 0 0 0.6rem; color: var(--muted); font-size: 0.88rem; }
 

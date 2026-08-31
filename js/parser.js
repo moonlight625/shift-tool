@@ -129,6 +129,9 @@
         cd: cd,
         name: name.trim(),
         role: role,
+        // isKeyHolder は「追加の鍵保持者」設定で後から書き換わる。
+        // isRoleKeyHolder は役職由来の固定値(UIで外せない側)
+        isRoleKeyHolder: isKeyHolderRole(role),
         isKeyHolder: isKeyHolderRole(role),
         employment: typeof row[6] === "number" ? row[6] : null,
         shifts: shifts,
@@ -140,8 +143,17 @@
     var first = dates[0];
     var month =
       first.getUTCFullYear() + "-" + String(first.getUTCMonth() + 1).padStart(2, "0");
+    // 店番(1行目D列、なければE列の店名)。設定の保存キーを店舗ごとに分けるのに使う
+    var head = rows[0] || [];
+    var storeId =
+      head[3] !== undefined && head[3] !== null
+        ? String(head[3]).trim()
+        : head[4] !== undefined && head[4] !== null
+          ? String(head[4]).trim()
+          : "";
     return {
       month: month,
+      storeId: storeId || "default",
       dates: dates,
       staff: staff,
       unknownCodes: Object.keys(unknown),

@@ -258,40 +258,146 @@
     return td;
   }
 
-  // 優先保持者を選ぶチェックボックスパネル
-  function prefPanel(model, preferredCds, onPrefsChange) {
-    var panel = el("div", "pref-panel");
-    panel.appendChild(el("h3", null, "優先して鍵を持つ人"));
+  var CIRCLED = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩"];
+
+  // 設定パネルの開閉状態(再描画しても維持する)
+  var settingsOpen = false;
+
+  // 鍵まわりの設定パネル(優先順位・月初の持ち主・鍵を持てる人)
+  function settingsPanel(model, opts) {
+    var preferredCds = opts.preferredCds || [];
+    var keyholders = model.staff.filter(function (s) {
+      return s.isKeyHolder;
+    });
+    var panel = el("details", "pref-panel");
+    panel.open = settingsOpen;
+    panel.addEventListener("toggle", function () {
+      settingsOpen = panel.open;
+    });
+    panel.appendChild(
+      el("summary", "settings-summary", "⚙ 鍵の設定(優先順位・月初の持ち主・鍵を持てる人)")
+    );
+
+    // --- 優先順位 ---
+    panel.appendChild(el("h4", "settings-h", "優先して鍵を持つ人"));
     panel.appendChild(
       el(
         "p",
         "pref-hint",
-        "チェックした人に鍵をなるべく集めます(その人たちで回せない日だけ他の人に受け渡します)。設定はこのブラウザに保存されます。"
+        "チェックした順番が優先順位になります(①が最優先)。その人たちで回せない日だけ他の人に受け渡します。"
       )
     );
     var list = el("div", "pref-list");
+    keyholders.forEach(function (s) {
+      var label = el("label", "pref-item");
+      var cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.value = String(s.cd);
+      var rank = preferredCds.indexOf(s.cd);
+      cb.checked = rank !== -1;
+      cb.addEventListener("change", function () {
+        var cds = preferredCds.slice();
+        var idx = cds.indexOf(s.cd);
+        if (cb.checked && idx === -1) cds.push(s.cd);
+        if (!cb.checked && idx !== -1) cds.splice(idx, 1);
+        opts.onPrefsChange(cds);
+      });
+      label.appendChild(cb);
+      if (rank !== -1) {
+        label.appendChild(el("span", "pref-rank", CIRCLED[rank] || String(rank + 1)));
+      }
+      label.appendChild(el("span", null, s.name + (s.role ? "(" + s.role + ")" : "")));
+      list.appendChild(label);
+    });
+    panel.appendChild(list);
+
+    // --- 月初の鍵の持ち主 ---
+    panel.appendChild(el("h4", "settings-h", "月初(1日の朝)の鍵の持ち主"));
+    panel.appendChild(
+      el(
+        "p",
+        "pref-hint",
+        "前月末に誰が鍵を持ち帰ったかを入力すると、それを前提に計画します。(自動)なら最適な人を選びます。"
+      )
+    );
+    var initRow = el("div", "init-row");
+    for (var k = 0; k < 3; k++) {
+      (function (k2) {
+        var wrap = el("label", "init-item");
+        wrap.appendChild(el("span", null, k2 === 0 ? "鍵1(店長キー)" : "鍵" + (k2 + 1)));
+        var sel = document.createElement("select");
+        var auto = document.createElement("option");
+        auto.value = "";
+        auto.textContent = "(自動)";
+        sel.appendChild(auto);
+        var current = (opts.initialCds || [])[k2];
+        keyholders.forEach(function (s) {
+          var o = document.createElement("option");
+          o.value = String(s.cd);
+          o.textContent = s.name;
+          if (current === s.cd) o.selected = true;
+          sel.appendChild(o);
+        });
+        sel.addEventListener("change", function () {
+          opts.onInitialChange(k2, sel.value ? Number(sel.value) : null);
+        });
+        wrap.appendChild(sel);
+        initRow.appendChild(wrap);
+      })(k);
+    }
+    panel.appendChild(initRow);
+
+    // --- 鍵を持てる人の追加 ---
+    panel.appendChild(el("h4", "settings-h", "鍵を持てる人"));
+    panel.appendChild(
+      el(
+        "p",
+        "pref-hint",
+        "店長・リーダーは常に鍵を持てます。それ以外に鍵を持てる人がいれば追加してください。"
+      )
+    );
+    var holderRow = el("div", "pref-list");
+    keyholders.forEach(function (s) {
+      var chip = el("span", "pref-item holder-chip" + (s.isRoleKeyHolder ? " holder-fixed" : ""));
+      chip.appendChild(el("span", null, s.name + (s.role ? "(" + s.role + ")" : "")));
+      if (!s.isRoleKeyHolder) {
+        var x = el("button", "holder-remove", "✕");
+        x.title = "鍵保持者から外す";
+        x.addEventListener("click", function () {
+          var cds = (opts.extraCds || []).filter(function (cd) {
+            return cd !== s.cd;
+          });
+          opts.onExtraChange(cds);
+        });
+        chip.appendChild(x);
+      }
+      holderRow.appendChild(chip);
+    });
+    var addSel = document.createElement("select");
+    addSel.className = "holder-add";
+    var ph = document.createElement("option");
+    ph.value = "";
+    ph.textContent = "＋ 追加…";
+    addSel.appendChild(ph);
     model.staff
       .filter(function (s) {
-        return s.isKeyHolder;
+        return !s.isKeyHolder;
       })
       .forEach(function (s) {
-        var label = el("label", "pref-item");
-        var cb = document.createElement("input");
-        cb.type = "checkbox";
-        cb.value = String(s.cd);
-        cb.checked = preferredCds.indexOf(s.cd) !== -1;
-        cb.addEventListener("change", function () {
-          var cds = [];
-          list.querySelectorAll("input:checked").forEach(function (i) {
-            cds.push(Number(i.value));
-          });
-          onPrefsChange(cds);
-        });
-        label.appendChild(cb);
-        label.appendChild(el("span", null, s.name + (s.role ? "(" + s.role + ")" : "")));
-        list.appendChild(label);
+        var o = document.createElement("option");
+        o.value = String(s.cd);
+        o.textContent = s.name;
+        addSel.appendChild(o);
       });
-    panel.appendChild(list);
+    addSel.addEventListener("change", function () {
+      if (!addSel.value) return;
+      var cds = (opts.extraCds || []).slice();
+      cds.push(Number(addSel.value));
+      opts.onExtraChange(cds);
+    });
+    holderRow.appendChild(addSel);
+    panel.appendChild(holderRow);
+
     return panel;
   }
 
@@ -299,7 +405,7 @@
     container.textContent = "";
     opts = opts || {};
 
-    container.appendChild(prefPanel(model, opts.preferredCds || [], opts.onPrefsChange));
+    container.appendChild(settingsPanel(model, opts));
 
     var intro = el("div", "keys-intro");
     intro.appendChild(

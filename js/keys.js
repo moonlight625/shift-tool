@@ -5,17 +5,20 @@
  *
  * 受け渡し計画は動的計画法(DP)で月全体を最適化する:
  *   状態 = 3本の鍵をどの鍵保持者が持っているか(1人1本まで、重複なし)
- *   コスト = ①「開け番の誰も鍵を持っていない朝」の数(最小化) が最優先、
- *            次いで ②優先保持者以外が持つ夜の数、③受け渡し回数。
+ *   コスト(優先順): ①「開け番の誰も鍵を持っていない朝」と
+ *                    「閉め番の誰も鍵を持っていない夜」の数(最小化)
+ *                  ②優先順位リストに基づく保持コスト(上位ほど優先して持つ)
+ *                  ③受け渡し回数
  *   鍵の移動は「その日、渡す側と受け取る側が両方出勤している」場合のみ
  *   (手動上書きだけは休みの人への店外受け渡しも許可)。
- *   店が開かない日は鍵は動かない。鍵1の月初の持ち主は店長に固定。
+ *   店が開かない日は鍵は動かない。
+ *   月初の持ち主は initialCds で指定でき、未指定の鍵1は店長スタート。
  * 鍵保持者が多すぎて状態数が爆発する場合(11人以上)は貪欲法にフォールバック。
  *
- * analyzeKeys(model, days, preferredCds, overrides) → [
- *   preferredCds: 優先して鍵を持たせる人のCD配列(省略可)
- *   overrides: 手動上書き {"<日index>-<鍵index>": cd}(省略可)。その夜の
- *   その鍵の持ち帰り先を固定し、残りは上書きを前提に最適化し直す。
+ * analyzeKeys(model, days, opts) → 日ごとの配列
+ *   opts.preferredCds: 優先して鍵を持たせる人のCD配列。並び順=優先順位(先頭が最優先)
+ *   opts.overrides:    手動上書き {"<日index>-<鍵index>": cd}。無条件の制約
+ *   opts.initialCds:   [cd|null ×3] 月初(1日の朝)に各鍵を持っている人
  *
  *   { date,
  *     openHolders / closeHolders / midHolders: [{staff, code, pattern}],
@@ -33,8 +36,8 @@
   "use strict";
 
   var NUM_KEYS = 3;
-  var WARN_COST = 1e6; // 朝に鍵が無い日
-  var NONPREF_COST = 1e3; // 優先者以外が持つ夜
+  var WARN_COST = 1e9; // 朝または夜に鍵が無い日
+  var RANK_COST = 1e3; // 優先順位1つ下の人が1晩持つコスト
   var MOVE_COST = 1; // 受け渡し1回
   var MAX_DP_HOLDERS = 10;
 
@@ -51,6 +54,10 @@
       day.open.forEach(function (e) {
         if (e.staff.isKeyHolder) openSet[e.staff.cd] = true;
       });
+      var closeSet = {};
+      day.close.forEach(function (e) {
+        if (e.staff.isKeyHolder) closeSet[e.staff.cd] = true;
+      });
       var workingIdx = [];
       keyholders.forEach(function (s, i) {
         if (works[s.cd]) workingIdx.push(i);
@@ -58,7 +65,9 @@
       return {
         works: works,
         openSet: openSet,
+        closeSet: closeSet,
         hasOpenKH: Object.keys(openSet).length > 0,
+        hasCloseKH: Object.keys(closeSet).length > 0,
         workingIdx: workingIdx,
         storeOpen: day.counts.open + day.counts.close + day.counts.mid > 0,
       };
@@ -66,7 +75,7 @@
   }
 
   // 月全体の最適計画(DP)。適用不能なら null を返す
-  function optimalPlan(keyholders, days, info, pref, hasPref, overrides, managerIdx) {
+  function optimalPlan(keyholders, days, info, rankOf, unlistedRank, hasPref, overrides, managerIdx, initIdx) {
     var K = keyholders.length;
     if (K < NUM_KEYS || K > MAX_DP_HOLDERS) return null;
 
@@ -95,14 +104,19 @@
       Object.keys(overrides).forEach(function (key) {
         var cd = overrides[key];
         if (cd === undefined || cd === null || idxByCd[cd] === undefined) return;
-        var parts = key.split("-");
-        var dayStr = parts[0];
+        var dayStr = key.split("-")[0];
         for (var k2 = 0; k2 < NUM_KEYS; k2++) {
           if (forced[dayStr + "-" + k2] === idxByCd[cd]) return;
         }
         forced[key] = idxByCd[cd];
       });
     }
+
+    var rankCost = function (i) {
+      if (!hasPref) return 0;
+      var r = rankOf[keyholders[i].cd];
+      return (r === undefined ? unlistedRank : r) * RANK_COST;
+    };
 
     var morningCost = function (inf, st) {
       if (!inf.storeOpen || !inf.hasOpenKH) return 0;
@@ -112,9 +126,26 @@
       return WARN_COST;
     };
 
+    var eveningCost = function (inf, o0, o1, o2) {
+      if (!inf.storeOpen || !inf.hasCloseKH) return 0;
+      if (
+        inf.closeSet[keyholders[o0].cd] ||
+        inf.closeSet[keyholders[o1].cd] ||
+        inf.closeSet[keyholders[o2].cd]
+      ) {
+        return 0;
+      }
+      return WARN_COST;
+    };
+
     var dp = new Array(S).fill(Infinity);
     states.forEach(function (st, i) {
-      if (managerIdx === -1 || st[0] === managerIdx) dp[i] = 0;
+      for (var k = 0; k < NUM_KEYS; k++) {
+        if (initIdx[k] !== null && st[k] !== initIdx[k]) return;
+      }
+      // 鍵1の月初指定がなければ店長スタート
+      if (initIdx[0] === null && managerIdx !== -1 && st[0] !== managerIdx) return;
+      dp[i] = 0;
     });
     var parents = [];
 
@@ -149,13 +180,13 @@
               var ti = sid[o0 + "," + o1 + "," + o2];
               var moved =
                 (o0 !== st[0] ? 1 : 0) + (o1 !== st[1] ? 1 : 0) + (o2 !== st[2] ? 1 : 0);
-              var npf = 0;
-              if (hasPref) {
-                [o0, o1, o2].forEach(function (i2) {
-                  if (!pref[keyholders[i2].cd]) npf++;
-                });
-              }
-              var cost = base + moved * MOVE_COST + npf * NONPREF_COST;
+              var cost =
+                base +
+                moved * MOVE_COST +
+                rankCost(o0) +
+                rankCost(o1) +
+                rankCost(o2) +
+                eveningCost(inf, o0, o1, o2);
               if (cost < ndp[ti]) {
                 ndp[ti] = cost;
                 par[ti] = si;
@@ -192,16 +223,26 @@
   }
 
   // フォールバック: 1日ずつ決める貪欲法(鍵保持者が3人未満/11人以上のとき)
-  function greedyPlan(keyholders, days, info, pref, hasPref, overrides, manager) {
+  function greedyPlan(keyholders, days, info, rankOf, unlistedRank, hasPref, overrides, manager, initialCds) {
     var others = keyholders
       .filter(function (s) {
         return s !== manager;
       })
       .sort(function (x, y) {
-        return (pref[y.cd] ? 1 : 0) - (pref[x.cd] ? 1 : 0);
+        var rx = rankOf[x.cd] === undefined ? unlistedRank : rankOf[x.cd];
+        var ry = rankOf[y.cd] === undefined ? unlistedRank : rankOf[y.cd];
+        return rx - ry;
       });
     var holders = [manager || others[0] || null];
     for (var k = 1; k < NUM_KEYS; k++) holders[k] = others[k - 1] || null;
+    // 月初指定の反映(同一人物の重複指定は最初の鍵を優先)
+    (initialCds || []).forEach(function (cd, k2) {
+      if (cd === undefined || cd === null) return;
+      var s = keyholders.find(function (c) {
+        return c.cd === cd;
+      });
+      if (s && holders.indexOf(s) === -1) holders[k2] = s;
+    });
     var initial = holders.slice();
 
     var nights = days.map(function (day, i) {
@@ -218,7 +259,12 @@
         });
       }
       var score = function (s) {
-        return (opensTomorrow[s.cd] ? 0 : 4) + (hasPref && !pref[s.cd] ? 2 : 0);
+        var r = rankOf[s.cd] === undefined ? unlistedRank : rankOf[s.cd];
+        return (
+          (opensTomorrow[s.cd] ? 0 : 100) +
+          (inf.closeSet[s.cd] ? 0 : 10) +
+          (hasPref ? r : 0)
+        );
       };
       var movable = [];
       holders.forEach(function (prev, k2) {
@@ -271,17 +317,34 @@
     return { initial: initial, nights: nights };
   }
 
-  function analyzeKeys(model, days, preferredCds, overrides) {
+  function analyzeKeys(model, days, opts) {
+    opts = opts || {};
+    var preferredCds = opts.preferredCds || [];
+    var overrides = opts.overrides || {};
     var keyholders = model.staff.filter(function (s) {
       return s.isKeyHolder;
     });
-    var pref = {};
-    (preferredCds || []).forEach(function (cd) {
-      pref[cd] = true;
+    var rankOf = {};
+    preferredCds.forEach(function (cd, i) {
+      rankOf[cd] = i;
     });
-    var hasPref = (preferredCds || []).length > 0;
+    var unlistedRank = preferredCds.length;
+    var hasPref = preferredCds.length > 0;
     var manager = keyholders.find(function (s) {
       return s.role.indexOf("店長") !== -1;
+    });
+
+    var idxByCd = {};
+    keyholders.forEach(function (s, i) {
+      idxByCd[s.cd] = i;
+    });
+    var initIdx = [null, null, null];
+    var seenInit = {};
+    (opts.initialCds || []).forEach(function (cd, k) {
+      if (k >= NUM_KEYS || cd === undefined || cd === null) return;
+      if (idxByCd[cd] === undefined || seenInit[cd]) return; // 鍵保持者以外・重複は無視
+      seenInit[cd] = true;
+      initIdx[k] = idxByCd[cd];
     });
 
     var info = buildDayInfo(days, keyholders);
@@ -290,11 +353,24 @@
         keyholders,
         days,
         info,
-        pref,
+        rankOf,
+        unlistedRank,
         hasPref,
         overrides,
-        manager ? keyholders.indexOf(manager) : -1
-      ) || greedyPlan(keyholders, days, info, pref, hasPref, overrides, manager);
+        manager ? keyholders.indexOf(manager) : -1,
+        initIdx
+      ) ||
+      greedyPlan(
+        keyholders,
+        days,
+        info,
+        rankOf,
+        unlistedRank,
+        hasPref,
+        overrides,
+        manager,
+        opts.initialCds
+      );
 
     var holders = plan.initial;
     return days.map(function (day, i) {
@@ -311,6 +387,10 @@
         return !inf.works[s.cd];
       });
 
+      var morning = holders;
+      var night = plan.nights[i];
+      holders = night;
+
       var warnings = [];
       if (inf.storeOpen) {
         if (openKH.length === 0) {
@@ -318,7 +398,7 @@
         } else {
           // 朝の時点で鍵を持って来られる開け番がいるか
           var morningOk = openKH.some(function (e) {
-            return holders.indexOf(e.staff) !== -1;
+            return morning.indexOf(e.staff) !== -1;
           });
           if (!morningOk) {
             warnings.push("開け番の誰も鍵を持っていません(前日までの受け渡しが必要)");
@@ -326,12 +406,16 @@
         }
         if (closeKH.length === 0) {
           warnings.push("閉め番に鍵を持てる人がいません");
+        } else {
+          // 閉店時、閉め番の誰かが鍵を持っているか
+          var eveningOk = closeKH.some(function (e) {
+            return night.indexOf(e.staff) !== -1;
+          });
+          if (!eveningOk) {
+            warnings.push("閉め番の誰も鍵を持っていません(閉店時に店に鍵が残りません)");
+          }
         }
       }
-
-      var morning = holders;
-      var night = plan.nights[i];
-      holders = night;
 
       return {
         date: day.date,
@@ -340,15 +424,13 @@
         midHolders: midKH,
         offHolders: offKH,
         keys: morning.map(function (m, k) {
-          var ov = overrides ? overrides[i + "-" + k] : undefined;
+          var ov = overrides[i + "-" + k];
           return {
             morning: m,
             night: night[k],
             manual: ov !== undefined && ov !== null && !!night[k] && night[k].cd === ov,
             editable:
-              inf.storeOpen &&
-              inf.workingIdx.length > 0 &&
-              (!m || !!inf.works[m.cd]),
+              inf.storeOpen && inf.workingIdx.length > 0 && (!m || !!inf.works[m.cd]),
           };
         }),
         carry: night.slice(),
