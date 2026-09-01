@@ -484,6 +484,85 @@ tr.wd-sat .td-date { color: var(--sat); }
 
 .key-arrow { margin: 0 0.35rem; color: var(--accent); font-weight: 700; }
 
+/* ---------- 設定タブ ---------- */
+
+.settings-page {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1rem 1.3rem 1.5rem;
+}
+
+.class-preview { max-height: 320px; overflow-y: auto; }
+
+.class-chip {
+  display: inline-block;
+  font-weight: 700;
+  font-size: 0.85rem;
+  border-radius: 6px;
+  padding: 0.1rem 0.5rem;
+}
+
+.cl-open { background: var(--open-bg); color: var(--open-fg); }
+.cl-close { background: var(--close-bg); color: var(--close-fg); }
+.cl-both { background: #f3e8fb; color: #7c3aed; }
+.cl-mid { background: var(--mid-bg); color: var(--mid-fg); }
+.cl-other { background: var(--bg); color: var(--muted); }
+
+.hours-input {
+  width: 5.5em;
+  font-size: 0.95rem;
+  padding: 0.25rem 0.4rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+/* ---------- 列の表示切替・サジェスト ---------- */
+
+.col-toggles { display: inline-flex; align-items: center; gap: 0.4rem; }
+
+.col-toggles-label { color: var(--muted); font-weight: 400; font-size: 0.9rem; }
+
+.col-toggle {
+  border: 1px solid var(--accent);
+  background: #eff4ff;
+  color: var(--accent);
+  border-radius: 999px;
+  padding: 0.15rem 0.7rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.col-toggle.col-off {
+  border-color: var(--border);
+  background: var(--bg);
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.keys-main.hide-open [data-col="open"],
+.keys-main.hide-close [data-col="close"],
+.keys-main.hide-warn [data-col="warn"] { display: none; }
+
+.suggest-box {
+  background: #f0faf1;
+  border: 1px solid #a7d8ac;
+  color: #1d6b2a;
+}
+
+.suggest-title { font-weight: 700; margin-bottom: 0.4rem; }
+
+.suggest-row {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin: 0.25rem 0;
+}
+
+.suggest-row .btn { padding: 0.2rem 0.8rem; font-size: 0.9rem; }
+
 /* ---------- フッター ---------- */
 
 .site-footer {
@@ -511,7 +590,8 @@ tr.wd-sat .td-date { color: var(--sat); }
 
 @media print {
   .site-header, .tabs, .upload-section, .hint, .keys-intro, .pref-panel,
-  .override-bar, .key-select, .site-footer { display: none !important; }
+  .override-bar, .key-select, .site-footer, .suggest-box,
+  #view-settings { display: none !important; }
   body { background: #fff; }
   main { padding: 0; max-width: none; }
   #view-summary { display: none !important; }

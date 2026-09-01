@@ -12,6 +12,7 @@
   var tabs = document.querySelectorAll(".tab");
   var viewSummary = document.getElementById("view-summary");
   var viewKeys = document.getElementById("view-keys");
+  var viewSettings = document.getElementById("view-settings");
   var printBtn = document.getElementById("print-btn");
   var reloadBtn = document.getElementById("reload-btn");
 
@@ -44,7 +45,49 @@
       initial: "shift-tool-initial-" + sid + "-" + model.month,
       overrides: "shift-tool-key-overrides-" + sid + "-" + model.month,
       overridesOld: "shift-tool-key-overrides-" + model.month,
+      hours: "shift-tool-hours-" + sid,
+      numKeys: "shift-tool-numkeys-" + sid,
+      hiddenCols: "shift-tool-hidden-cols-" + sid,
+      suggestHours: "shift-tool-suggest-hours-" + sid,
     };
+  }
+
+  // 月の実働時間(h)。マスタの始業・終業・休憩から計算
+  function staffHours(model, s) {
+    var total = 0;
+    s.shifts.forEach(function (code) {
+      var p = code && model.patterns[code];
+      if (p) total += p.hours || 0;
+    });
+    return total;
+  }
+
+  // 「この人を追加すると警告が減る」候補を計算(実働の多い順・上位3件)
+  function computeSuggestions(model, days, keyOpts, minHours, currentWarnCount) {
+    if (currentWarnCount === 0) return [];
+    var results = [];
+    model.staff.forEach(function (s) {
+      if (s.isKeyHolder || !s.shifts.some(Boolean)) return;
+      var hours = staffHours(model, s);
+      if (hours < minHours) return;
+      results.push({ staff: s, hours: hours });
+    });
+    results.sort(function (a, b) {
+      return b.hours - a.hours;
+    });
+    var out = [];
+    results.slice(0, 12).forEach(function (r) {
+      r.staff.isKeyHolder = true;
+      var kd = ShiftKeys.analyzeKeys(model, days, keyOpts);
+      r.staff.isKeyHolder = false;
+      var after = kd.reduce(function (n, d) {
+        return n + d.warnings.length;
+      }, 0);
+      if (after < currentWarnCount) {
+        out.push({ staff: r.staff, hours: r.hours, before: currentWarnCount, after: after });
+      }
+    });
+    return out.slice(0, 3);
   }
 
   function showError(message) {
@@ -66,61 +109,47 @@
     reader.onload = function (e) {
       try {
         var model = ShiftParser.parseWorkbook(new Uint8Array(e.target.result));
-        var days = ShiftSummary.summarize(model);
 
         var parts = model.month.split("-");
         monthLabel.textContent = parts[0] + "年" + Number(parts[1]) + "月のシフト";
 
-        // 鍵まわりの設定は鍵ビュー内で変更でき、変えるたびに計画を計算し直す
+        // 店舗ごとの設定を読み込む
         var keys = storageKeys(model);
         var prefs = loadJSON(keys.prefs, keys.prefsOld, []);
         var overrides = loadJSON(keys.overrides, keys.overridesOld, {});
-        var initialCds = loadJSON(keys.initial, null, [null, null, null]);
+        var initialCds = loadJSON(keys.initial, null, []);
         var extraCds = loadJSON(keys.extra, null, []);
+        var times = loadJSON(keys.hours, null, { open: "10:00", close: "20:00" });
+        var numKeys = loadJSON(keys.numKeys, null, 3);
+        var hiddenCols = loadJSON(keys.hiddenCols, null, []);
+        var suggestHours = loadJSON(keys.suggestHours, null, model.baseHours || 120);
+
+        var days = null;
 
         var applyExtras = function () {
           model.staff.forEach(function (s) {
             s.isKeyHolder = s.isRoleKeyHolder || extraCds.indexOf(s.cd) !== -1;
           });
         };
-        applyExtras();
 
-        ShiftRender.renderSummary(model, days, viewSummary);
+        // 営業時間 → 分類 → 集計、をやり直す(初回と営業時間変更時)
+        var reclassify = function () {
+          ShiftParser.applyClassification(model, times.open, times.close);
+          days = ShiftSummary.summarize(model);
+        };
 
         var renderKeysView = function () {
-          var keyDays = ShiftKeys.analyzeKeys(model, days, {
+          var keyOpts = {
+            numKeys: numKeys,
             preferredCds: prefs,
             overrides: overrides,
             initialCds: initialCds,
-          });
+          };
+          var keyDays = ShiftKeys.analyzeKeys(model, days, keyOpts);
+          var warnCount = keyDays.reduce(function (n, d) {
+            return n + d.warnings.length;
+          }, 0);
           ShiftRender.renderKeys(model, keyDays, viewKeys, {
-            preferredCds: prefs,
-            onPrefsChange: function (cds) {
-              prefs = cds;
-              saveJSON(keys.prefs, cds);
-              renderKeysView();
-            },
-            initialCds: initialCds,
-            onInitialChange: function (k, cd) {
-              if (cd !== null) {
-                // 同じ人を2本に指定したら、先に指定していた側を解除する
-                initialCds = initialCds.map(function (v, j) {
-                  return j !== k && v === cd ? null : v;
-                });
-              }
-              initialCds[k] = cd;
-              saveJSON(keys.initial, initialCds);
-              renderKeysView();
-            },
-            extraCds: extraCds,
-            onExtraChange: function (cds) {
-              extraCds = cds;
-              saveJSON(keys.extra, cds);
-              applyExtras();
-              // 🔑マークが変わるので人数ビューも描き直す
-              ShiftRender.renderSummary(model, days, viewSummary);
-              renderKeysView();
-            },
             overrideCount: Object.keys(overrides).length,
             onOverride: function (dayIndex, keyIndex, cd) {
               var key = dayIndex + "-" + keyIndex;
@@ -137,9 +166,77 @@
               saveJSON(keys.overrides, overrides);
               renderKeysView();
             },
+            hiddenCols: hiddenCols,
+            onHiddenColsChange: function (cols) {
+              hiddenCols = cols;
+              saveJSON(keys.hiddenCols, cols);
+              renderKeysView();
+            },
+            suggestions: computeSuggestions(model, days, keyOpts, suggestHours, warnCount),
+            onAddKeyholder: function (cd) {
+              extraCds = extraCds.concat([cd]);
+              saveJSON(keys.extra, extraCds);
+              renderAll();
+            },
           });
         };
-        renderKeysView();
+
+        var renderSettingsView = function () {
+          ShiftRender.renderSettings(model, viewSettings, {
+            openTime: times.open,
+            closeTime: times.close,
+            onTimesChange: function (open, close) {
+              times = { open: open, close: close };
+              saveJSON(keys.hours, times);
+              renderAll();
+            },
+            numKeys: numKeys,
+            onNumKeysChange: function (n) {
+              numKeys = n;
+              saveJSON(keys.numKeys, n);
+              renderAll();
+            },
+            preferredCds: prefs,
+            onPrefsChange: function (cds) {
+              prefs = cds;
+              saveJSON(keys.prefs, cds);
+              renderAll();
+            },
+            initialCds: initialCds,
+            onInitialChange: function (k, cd) {
+              if (cd !== null) {
+                // 同じ人を2本に指定したら、先に指定していた側を解除する
+                initialCds = initialCds.map(function (v, j) {
+                  return j !== k && v === cd ? null : v;
+                });
+              }
+              initialCds[k] = cd;
+              saveJSON(keys.initial, initialCds);
+              renderAll();
+            },
+            extraCds: extraCds,
+            onExtraChange: function (cds) {
+              extraCds = cds;
+              saveJSON(keys.extra, cds);
+              renderAll();
+            },
+            suggestHours: suggestHours,
+            onSuggestHoursChange: function (v) {
+              suggestHours = v;
+              saveJSON(keys.suggestHours, v);
+              renderAll();
+            },
+          });
+        };
+
+        var renderAll = function () {
+          applyExtras();
+          reclassify();
+          ShiftRender.renderSummary(model, days, viewSummary);
+          renderKeysView();
+          renderSettingsView();
+        };
+        renderAll();
 
         document.body.classList.add("loaded");
         appMain.hidden = false;
@@ -194,6 +291,7 @@
       var target = tab.getAttribute("data-view");
       viewSummary.hidden = target !== "summary";
       viewKeys.hidden = target !== "keys";
+      viewSettings.hidden = target !== "settings";
       printBtn.hidden = target !== "keys";
       window.scrollTo(0, 0);
     });

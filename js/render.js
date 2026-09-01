@@ -5,6 +5,7 @@
   "use strict";
 
   var WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
+  var CIRCLED = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩"];
 
   function el(tag, className, text) {
     var node = document.createElement(tag);
@@ -55,7 +56,8 @@
           "div",
           null,
           "パターン表にない記号があります(「その他」として数えています): " +
-            model.unknownCodes.join("、")
+            model.unknownCodes.join("、") +
+            " — ⚙設定タブの分類一覧も確認してください"
         )
       );
       container.appendChild(warn);
@@ -150,10 +152,263 @@
     }
   }
 
+  // ---------- 設定タブ ----------
+
+  function sectionHeading(parent, title, hint) {
+    parent.appendChild(el("h3", "settings-h", title));
+    if (hint) parent.appendChild(el("p", "pref-hint", hint));
+  }
+
+  function classLabel(p) {
+    if (p.opens && p.closes) return ["開け+閉め", "cl-both"];
+    if (p.opens) return ["開け", "cl-open"];
+    if (p.closes) return ["閉め", "cl-close"];
+    if (p.kind === 0) return ["その他", "cl-other"];
+    return ["中番", "cl-mid"];
+  }
+
+  function renderSettings(model, container, o) {
+    container.textContent = "";
+    var panel = el("div", "settings-page");
+
+    // --- 営業時間 ---
+    sectionHeading(
+      panel,
+      "🕙 営業時間",
+      "開け番=開店より前に出勤する人、閉め番=閉店より後まで残る人、として分類します。店舗に合わせて変更してください。"
+    );
+    var timesRow = el("div", "init-row");
+    [["開店", "open"], ["閉店", "close"]].forEach(function (t) {
+      var wrap = el("label", "init-item");
+      wrap.appendChild(el("span", null, t[0]));
+      var input = document.createElement("input");
+      input.type = "time";
+      input.value = t[1] === "open" ? o.openTime : o.closeTime;
+      input.addEventListener("change", function () {
+        if (!input.value) return;
+        o.onTimesChange(
+          t[1] === "open" ? input.value : o.openTime,
+          t[1] === "close" ? input.value : o.closeTime
+        );
+      });
+      wrap.appendChild(input);
+      timesRow.appendChild(wrap);
+    });
+    panel.appendChild(timesRow);
+
+    // --- シフト記号の分類プレビュー ---
+    sectionHeading(
+      panel,
+      "🏷 シフト記号の分類",
+      "読み込んだマスタの全記号と、営業時間から決まった分類の一覧です(確認用)。"
+    );
+    var used = {};
+    model.staff.forEach(function (s) {
+      s.shifts.forEach(function (c) {
+        if (c) used[c] = (used[c] || 0) + 1;
+      });
+    });
+    var wrap2 = el("div", "table-wrap class-preview");
+    var table = el("table", "keys-table");
+    var hr = el("tr");
+    ["記号", "時間", "今月の使用", "分類"].forEach(function (h) {
+      hr.appendChild(el("th", null, h));
+    });
+    var thead = el("thead");
+    thead.appendChild(hr);
+    table.appendChild(thead);
+    var tbody = el("tbody");
+    Object.keys(model.patterns)
+      .sort(function (a, b) {
+        return (used[b] || 0) - (used[a] || 0);
+      })
+      .forEach(function (key) {
+        var p = model.patterns[key];
+        var tr = el("tr");
+        tr.appendChild(el("td", "td-date", key));
+        tr.appendChild(el("td", null, p.start + "–" + (p.end || "?")));
+        tr.appendChild(el("td", null, used[key] ? used[key] + "回" : "―"));
+        var lab = classLabel(p);
+        var td = el("td");
+        td.appendChild(el("span", "class-chip " + lab[1], lab[0]));
+        tr.appendChild(td);
+        tbody.appendChild(tr);
+      });
+    table.appendChild(tbody);
+    wrap2.appendChild(table);
+    panel.appendChild(wrap2);
+    if (model.unknownCodes.length) {
+      panel.appendChild(
+        el(
+          "p",
+          "pref-hint warn-text",
+          "⚠ マスタにない記号(その他として扱い中): " + model.unknownCodes.join("、")
+        )
+      );
+    }
+
+    // --- 鍵の本数 ---
+    sectionHeading(panel, "🔑 鍵の本数", "店舗にある鍵の本数です。");
+    var numSel = document.createElement("select");
+    for (var nk = 1; nk <= ShiftKeys.MAX_NUM_KEYS; nk++) {
+      var op = document.createElement("option");
+      op.value = String(nk);
+      op.textContent = nk + "本";
+      if (nk === o.numKeys) op.selected = true;
+      numSel.appendChild(op);
+    }
+    numSel.addEventListener("change", function () {
+      o.onNumKeysChange(Number(numSel.value));
+    });
+    numSel.className = "holder-add";
+    panel.appendChild(numSel);
+
+    var keyholders = model.staff.filter(function (s) {
+      return s.isKeyHolder;
+    });
+    var preferredCds = o.preferredCds || [];
+
+    // --- 優先順位 ---
+    sectionHeading(
+      panel,
+      "🥇 優先して鍵を持つ人",
+      "チェックした順番が優先順位になります(①が最優先)。その人たちで回せない日だけ他の人に受け渡します。"
+    );
+    var list = el("div", "pref-list");
+    keyholders.forEach(function (s) {
+      var label = el("label", "pref-item");
+      var cb = document.createElement("input");
+      cb.type = "checkbox";
+      var rank = preferredCds.indexOf(s.cd);
+      cb.checked = rank !== -1;
+      cb.addEventListener("change", function () {
+        var cds = preferredCds.slice();
+        var idx = cds.indexOf(s.cd);
+        if (cb.checked && idx === -1) cds.push(s.cd);
+        if (!cb.checked && idx !== -1) cds.splice(idx, 1);
+        o.onPrefsChange(cds);
+      });
+      label.appendChild(cb);
+      if (rank !== -1) {
+        label.appendChild(el("span", "pref-rank", CIRCLED[rank] || String(rank + 1)));
+      }
+      label.appendChild(el("span", null, s.name + (s.role ? "(" + s.role + ")" : "")));
+      list.appendChild(label);
+    });
+    panel.appendChild(list);
+
+    // --- 月初の鍵の持ち主 ---
+    sectionHeading(
+      panel,
+      "🌅 月初(1日の朝)の鍵の持ち主",
+      "前月末に誰が鍵を持ち帰ったかを入力すると、それを前提に計画します。(自動)なら最適な人を選びます。"
+    );
+    var initRow = el("div", "init-row");
+    for (var k = 0; k < o.numKeys; k++) {
+      (function (k2) {
+        var wrap = el("label", "init-item");
+        wrap.appendChild(el("span", null, k2 === 0 ? "鍵1(店長キー)" : "鍵" + (k2 + 1)));
+        var sel = document.createElement("select");
+        var auto = document.createElement("option");
+        auto.value = "";
+        auto.textContent = "(自動)";
+        sel.appendChild(auto);
+        var current = (o.initialCds || [])[k2];
+        keyholders.forEach(function (s) {
+          var op2 = document.createElement("option");
+          op2.value = String(s.cd);
+          op2.textContent = s.name;
+          if (current === s.cd) op2.selected = true;
+          sel.appendChild(op2);
+        });
+        sel.addEventListener("change", function () {
+          o.onInitialChange(k2, sel.value ? Number(sel.value) : null);
+        });
+        wrap.appendChild(sel);
+        initRow.appendChild(wrap);
+      })(k);
+    }
+    panel.appendChild(initRow);
+
+    // --- 鍵を持てる人 ---
+    sectionHeading(
+      panel,
+      "🙋 鍵を持てる人",
+      "店長・リーダーは常に鍵を持てます。それ以外に鍵を持てる人がいれば追加してください。"
+    );
+    var holderRow = el("div", "pref-list");
+    keyholders.forEach(function (s) {
+      var chip = el("span", "pref-item holder-chip" + (s.isRoleKeyHolder ? " holder-fixed" : ""));
+      chip.appendChild(el("span", null, s.name + (s.role ? "(" + s.role + ")" : "")));
+      if (!s.isRoleKeyHolder) {
+        var x = el("button", "holder-remove", "✕");
+        x.title = "鍵保持者から外す";
+        x.addEventListener("click", function () {
+          o.onExtraChange(
+            (o.extraCds || []).filter(function (cd) {
+              return cd !== s.cd;
+            })
+          );
+        });
+        chip.appendChild(x);
+      }
+      holderRow.appendChild(chip);
+    });
+    var addSel = document.createElement("select");
+    addSel.className = "holder-add";
+    var ph = document.createElement("option");
+    ph.value = "";
+    ph.textContent = "＋ 追加…";
+    addSel.appendChild(ph);
+    model.staff
+      .filter(function (s) {
+        return !s.isKeyHolder;
+      })
+      .forEach(function (s) {
+        var op3 = document.createElement("option");
+        op3.value = String(s.cd);
+        op3.textContent = s.name;
+        addSel.appendChild(op3);
+      });
+    addSel.addEventListener("change", function () {
+      if (!addSel.value) return;
+      var cds = (o.extraCds || []).slice();
+      cds.push(Number(addSel.value));
+      o.onExtraChange(cds);
+    });
+    holderRow.appendChild(addSel);
+    panel.appendChild(holderRow);
+
+    // --- サジェストの閾値 ---
+    sectionHeading(
+      panel,
+      "💡 追加候補のサジェスト",
+      "警告が残っているとき、追加すると警告が減る人を鍵ビューに提案します。月の実働がこの時間以上の人だけが候補になります(学生バイト除外用)。"
+    );
+    var hoursWrap = el("label", "init-item");
+    hoursWrap.appendChild(el("span", null, "最低実働"));
+    var hoursInput = document.createElement("input");
+    hoursInput.type = "number";
+    hoursInput.min = "0";
+    hoursInput.step = "10";
+    hoursInput.value = String(o.suggestHours);
+    hoursInput.className = "hours-input";
+    hoursInput.addEventListener("change", function () {
+      var v = Number(hoursInput.value);
+      if (!isNaN(v) && v >= 0) o.onSuggestHoursChange(v);
+    });
+    hoursWrap.appendChild(hoursInput);
+    hoursWrap.appendChild(el("span", null, "時間/月"));
+    panel.appendChild(hoursWrap);
+
+    container.appendChild(panel);
+  }
+
   // ---------- 鍵ビュー ----------
 
-  function holderCell(entries, critical) {
+  function holderCell(entries, critical, col) {
     var td = el("td");
+    td.setAttribute("data-col", col);
     if (!entries.length) {
       // 開け/閉めの空欄は事故ポイントなので赤、中番の空欄は正常なので薄く
       td.appendChild(
@@ -258,191 +513,98 @@
     return td;
   }
 
-  var CIRCLED = ["①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩"];
-
-  // 設定パネルの開閉状態(再描画しても維持する)
-  var settingsOpen = false;
-
-  // 鍵まわりの設定パネル(優先順位・月初の持ち主・鍵を持てる人)
-  function settingsPanel(model, opts) {
-    var preferredCds = opts.preferredCds || [];
-    var keyholders = model.staff.filter(function (s) {
-      return s.isKeyHolder;
-    });
-    var panel = el("details", "pref-panel");
-    panel.open = settingsOpen;
-    panel.addEventListener("toggle", function () {
-      settingsOpen = panel.open;
-    });
-    panel.appendChild(
-      el("summary", "settings-summary", "⚙ 鍵の設定(優先順位・月初の持ち主・鍵を持てる人)")
-    );
-
-    // --- 優先順位 ---
-    panel.appendChild(el("h4", "settings-h", "優先して鍵を持つ人"));
-    panel.appendChild(
-      el(
-        "p",
-        "pref-hint",
-        "チェックした順番が優先順位になります(①が最優先)。その人たちで回せない日だけ他の人に受け渡します。"
-      )
-    );
-    var list = el("div", "pref-list");
-    keyholders.forEach(function (s) {
-      var label = el("label", "pref-item");
-      var cb = document.createElement("input");
-      cb.type = "checkbox";
-      cb.value = String(s.cd);
-      var rank = preferredCds.indexOf(s.cd);
-      cb.checked = rank !== -1;
-      cb.addEventListener("change", function () {
-        var cds = preferredCds.slice();
-        var idx = cds.indexOf(s.cd);
-        if (cb.checked && idx === -1) cds.push(s.cd);
-        if (!cb.checked && idx !== -1) cds.splice(idx, 1);
-        opts.onPrefsChange(cds);
-      });
-      label.appendChild(cb);
-      if (rank !== -1) {
-        label.appendChild(el("span", "pref-rank", CIRCLED[rank] || String(rank + 1)));
-      }
-      label.appendChild(el("span", null, s.name + (s.role ? "(" + s.role + ")" : "")));
-      list.appendChild(label);
-    });
-    panel.appendChild(list);
-
-    // --- 月初の鍵の持ち主 ---
-    panel.appendChild(el("h4", "settings-h", "月初(1日の朝)の鍵の持ち主"));
-    panel.appendChild(
-      el(
-        "p",
-        "pref-hint",
-        "前月末に誰が鍵を持ち帰ったかを入力すると、それを前提に計画します。(自動)なら最適な人を選びます。"
-      )
-    );
-    var initRow = el("div", "init-row");
-    for (var k = 0; k < 3; k++) {
-      (function (k2) {
-        var wrap = el("label", "init-item");
-        wrap.appendChild(el("span", null, k2 === 0 ? "鍵1(店長キー)" : "鍵" + (k2 + 1)));
-        var sel = document.createElement("select");
-        var auto = document.createElement("option");
-        auto.value = "";
-        auto.textContent = "(自動)";
-        sel.appendChild(auto);
-        var current = (opts.initialCds || [])[k2];
-        keyholders.forEach(function (s) {
-          var o = document.createElement("option");
-          o.value = String(s.cd);
-          o.textContent = s.name;
-          if (current === s.cd) o.selected = true;
-          sel.appendChild(o);
-        });
-        sel.addEventListener("change", function () {
-          opts.onInitialChange(k2, sel.value ? Number(sel.value) : null);
-        });
-        wrap.appendChild(sel);
-        initRow.appendChild(wrap);
-      })(k);
-    }
-    panel.appendChild(initRow);
-
-    // --- 鍵を持てる人の追加 ---
-    panel.appendChild(el("h4", "settings-h", "鍵を持てる人"));
-    panel.appendChild(
-      el(
-        "p",
-        "pref-hint",
-        "店長・リーダーは常に鍵を持てます。それ以外に鍵を持てる人がいれば追加してください。"
-      )
-    );
-    var holderRow = el("div", "pref-list");
-    keyholders.forEach(function (s) {
-      var chip = el("span", "pref-item holder-chip" + (s.isRoleKeyHolder ? " holder-fixed" : ""));
-      chip.appendChild(el("span", null, s.name + (s.role ? "(" + s.role + ")" : "")));
-      if (!s.isRoleKeyHolder) {
-        var x = el("button", "holder-remove", "✕");
-        x.title = "鍵保持者から外す";
-        x.addEventListener("click", function () {
-          var cds = (opts.extraCds || []).filter(function (cd) {
-            return cd !== s.cd;
-          });
-          opts.onExtraChange(cds);
-        });
-        chip.appendChild(x);
-      }
-      holderRow.appendChild(chip);
-    });
-    var addSel = document.createElement("select");
-    addSel.className = "holder-add";
-    var ph = document.createElement("option");
-    ph.value = "";
-    ph.textContent = "＋ 追加…";
-    addSel.appendChild(ph);
-    model.staff
-      .filter(function (s) {
-        return !s.isKeyHolder;
-      })
-      .forEach(function (s) {
-        var o = document.createElement("option");
-        o.value = String(s.cd);
-        o.textContent = s.name;
-        addSel.appendChild(o);
-      });
-    addSel.addEventListener("change", function () {
-      if (!addSel.value) return;
-      var cds = (opts.extraCds || []).slice();
-      cds.push(Number(addSel.value));
-      opts.onExtraChange(cds);
-    });
-    holderRow.appendChild(addSel);
-    panel.appendChild(holderRow);
-
-    return panel;
-  }
-
   function renderKeys(model, keyDays, container, opts) {
     container.textContent = "";
     opts = opts || {};
+    var numKeys = keyDays.numKeys || 3;
 
-    container.appendChild(settingsPanel(model, opts));
+    if (keyDays.usedFallback) {
+      var fb = el("div", "banner banner-warn");
+      fb.textContent =
+        "⚠ 組み合わせが多すぎるため、受け渡しの最適化を簡易計算に切り替えています。" +
+        "警告が実際より多く出ることがあります。「鍵を持てる人」か鍵の本数を減らすと正確になります。";
+      container.appendChild(fb);
+    }
 
     var intro = el("div", "keys-intro");
     intro.appendChild(
       el(
         "p",
         null,
-        "鍵1〜3の列は受け渡し案(自動計算)です。「A → B」はその日の営業時間内にAからBへ渡し、" +
+        "鍵の列は受け渡し案(自動計算)です。「A → B」はその日の営業時間内にAからBへ渡し、" +
           "Bが持ち帰る、という意味です。名前だけの日はその人が持ったまま。(自宅)は保持者が休みで鍵が動かせない日です。" +
           "鍵のセルをクリックすると、その夜の持ち帰り先を手動で選べます(それ以降の日は自動で計算し直されます)。"
       )
     );
     container.appendChild(intro);
 
-    if (keyDays.usedFallback) {
-      var fb = el("div", "banner banner-warn");
-      fb.textContent =
-        "⚠ 鍵を持てる人が15人以上いるため、受け渡しの最適化を簡易計算に切り替えています。" +
-        "警告が実際より多く出ることがあります。「鍵を持てる人」を14人以下に減らすと正確になります。";
-      container.appendChild(fb);
-    }
-
+    // 表示列の切り替え + 手動変更リセット
+    var bar = el("div", "override-bar");
+    var toggles = el("span", "col-toggles");
+    toggles.appendChild(el("span", "col-toggles-label", "👁 表示:"));
+    [["open", "開け"], ["close", "閉め"], ["warn", "注意"]].forEach(function (c) {
+      var hidden = (opts.hiddenCols || []).indexOf(c[0]) !== -1;
+      var btn = el("button", "col-toggle" + (hidden ? " col-off" : ""), c[1]);
+      btn.addEventListener("click", function () {
+        var cols = (opts.hiddenCols || []).slice();
+        var idx = cols.indexOf(c[0]);
+        if (idx === -1) cols.push(c[0]);
+        else cols.splice(idx, 1);
+        opts.onHiddenColsChange(cols);
+      });
+      toggles.appendChild(btn);
+    });
+    bar.appendChild(toggles);
     if (opts.overrideCount > 0) {
-      var bar = el("div", "override-bar");
       bar.appendChild(el("span", null, "📌 手動変更 " + opts.overrideCount + "件"));
       var resetBtn = el("button", "btn btn-ghost", "手動変更をすべてリセット");
       resetBtn.addEventListener("click", opts.onResetOverrides);
       bar.appendChild(resetBtn);
-      container.appendChild(bar);
+    }
+    container.appendChild(bar);
+
+    // サジェスト
+    if (opts.suggestions && opts.suggestions.length) {
+      var sug = el("div", "banner suggest-box");
+      sug.appendChild(el("div", "suggest-title", "💡 鍵を持てる人を追加すると警告を減らせます:"));
+      opts.suggestions.forEach(function (sg) {
+        var row = el("div", "suggest-row");
+        row.appendChild(
+          el(
+            "span",
+            null,
+            sg.staff.name + "(月" + Math.round(sg.hours) + "h) — 警告 " + sg.before + "件 → " + sg.after + "件"
+          )
+        );
+        var add = el("button", "btn", "追加");
+        add.addEventListener("click", function () {
+          opts.onAddKeyholder(sg.staff.cd);
+        });
+        row.appendChild(add);
+        sug.appendChild(row);
+      });
+      container.appendChild(sug);
     }
 
     var wrap = el("div", "table-wrap");
-    var table = el("table", "keys-table");
+    var table = el("table", "keys-table keys-main");
+    (opts.hiddenCols || []).forEach(function (c) {
+      table.classList.add("hide-" + c);
+    });
     var thead = el("thead");
     var hr = el("tr");
-    ["日付", "開け", "閉め", "鍵1(店長キー)", "鍵2", "鍵3", "注意"].forEach(function (h) {
-      hr.appendChild(el("th", null, h));
-    });
+    var addTh = function (text, col, cls) {
+      var th = el("th", cls || null, text);
+      if (col) th.setAttribute("data-col", col);
+      hr.appendChild(th);
+    };
+    addTh("日付");
+    addTh("開け", "open", "th-open");
+    addTh("閉め", "close", "th-close");
+    for (var k = 0; k < numKeys; k++) {
+      addTh(k === 0 ? "鍵1(店長キー)" : "鍵" + (k + 1), null, "th-key");
+    }
+    addTh("注意", "warn");
     thead.appendChild(hr);
     table.appendChild(thead);
 
@@ -452,13 +614,14 @@
       if (day.warnings.length) tr.classList.add("row-warn");
 
       tr.appendChild(el("td", "td-date", fmtDate(day.date)));
-      tr.appendChild(holderCell(day.openHolders, true));
-      tr.appendChild(holderCell(day.closeHolders, true));
+      tr.appendChild(holderCell(day.openHolders, true, "open"));
+      tr.appendChild(holderCell(day.closeHolders, true, "close"));
       day.keys.forEach(function (pair, keyIndex) {
         tr.appendChild(keyCell(pair, day, dayIndex, keyIndex, opts));
       });
 
       var warnTd = el("td", "td-warn");
+      warnTd.setAttribute("data-col", "warn");
       day.warnings.forEach(function (w) {
         warnTd.appendChild(el("div", "warn-text", "⚠ " + w));
       });
@@ -474,5 +637,6 @@
   global.ShiftRender = {
     renderSummary: renderSummary,
     renderKeys: renderKeys,
+    renderSettings: renderSettings,
   };
 })(typeof window !== "undefined" ? window : globalThis);
