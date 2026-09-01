@@ -728,9 +728,139 @@
     container.appendChild(wrap);
   }
 
+  // ---------- 更新のお知らせ ----------
+
+  // entries: CHANGELOGの未読分。閉じたら onClose() を呼ぶ(既読化は呼び出し側)
+  function renderChangelog(entries, onClose) {
+    var overlay = el("div", "modal-overlay");
+    var panel = el("div", "modal-panel");
+
+    var close = function () {
+      overlay.remove();
+      document.removeEventListener("keydown", onKey);
+      onClose();
+    };
+    var onKey = function (e) {
+      if (e.key === "Escape") close();
+    };
+
+    var h = el("h2", "modal-title");
+    h.appendChild(icon("campaign"));
+    h.appendChild(document.createTextNode(" 更新のお知らせ"));
+    panel.appendChild(h);
+
+    entries.forEach(function (entry) {
+      panel.appendChild(el("h3", "modal-version", "v" + entry.version + "(" + entry.date + ")"));
+      var list = el("ul", "modal-list");
+      entry.items.forEach(function (item) {
+        var li = el("li");
+        li.appendChild(el("strong", null, item.title));
+        li.appendChild(el("div", "modal-body-text", item.body));
+        list.appendChild(li);
+      });
+      panel.appendChild(list);
+    });
+
+    var okBtn = el("button", "btn modal-ok", "OK");
+    okBtn.addEventListener("click", close);
+    panel.appendChild(okBtn);
+
+    overlay.addEventListener("click", function (e) {
+      if (e.target === overlay) close();
+    });
+    document.addEventListener("keydown", onKey);
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+    okBtn.focus();
+  }
+
+  // ---------- 改善要望フォーム ----------
+
+  // opts.onSend(text, name) は Promise を返す(成功でresolve)
+  function renderFeedback(opts) {
+    var overlay = el("div", "modal-overlay");
+    var panel = el("div", "modal-panel");
+
+    var close = function () {
+      overlay.remove();
+      document.removeEventListener("keydown", onKey);
+    };
+    var onKey = function (e) {
+      if (e.key === "Escape") close();
+    };
+
+    var h = el("h2", "modal-title");
+    h.appendChild(icon("campaign"));
+    h.appendChild(document.createTextNode(" 改善要望を送る"));
+    panel.appendChild(h);
+    panel.appendChild(
+      el(
+        "p",
+        "pref-hint",
+        "「こう使いたい」「ここが分かりにくい」など何でもどうぞ。開発者に届きます。" +
+          "スタッフの氏名などの個人情報は書かないでください。"
+      )
+    );
+
+    var nameInput = document.createElement("input");
+    nameInput.type = "text";
+    nameInput.placeholder = "名前・店舗など(任意)";
+    nameInput.className = "feedback-name";
+    nameInput.maxLength = 50;
+    panel.appendChild(nameInput);
+
+    var ta = document.createElement("textarea");
+    ta.className = "feedback-text";
+    ta.rows = 6;
+    ta.maxLength = 1000;
+    ta.placeholder = "要望・困りごとを書いてください";
+    panel.appendChild(ta);
+
+    var status = el("p", "feedback-status");
+    panel.appendChild(status);
+
+    var btnRow = el("div", "feedback-btns");
+    var cancelBtn = el("button", "btn btn-ghost", "キャンセル");
+    cancelBtn.addEventListener("click", close);
+    var sendBtn = el("button", "btn", "送信");
+    sendBtn.addEventListener("click", function () {
+      var text = ta.value.trim();
+      if (!text) {
+        status.textContent = "内容を入力してください。";
+        return;
+      }
+      sendBtn.disabled = true;
+      status.textContent = "送信中…";
+      opts
+        .onSend(text, nameInput.value.trim())
+        .then(function () {
+          status.textContent = "送信しました。ありがとうございます!";
+          sendBtn.remove();
+          cancelBtn.textContent = "閉じる";
+        })
+        .catch(function () {
+          sendBtn.disabled = false;
+          status.textContent = "送信に失敗しました。通信環境を確認してもう一度試してください。";
+        });
+    });
+    btnRow.appendChild(cancelBtn);
+    btnRow.appendChild(sendBtn);
+    panel.appendChild(btnRow);
+
+    overlay.addEventListener("click", function (e) {
+      if (e.target === overlay) close();
+    });
+    document.addEventListener("keydown", onKey);
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+    ta.focus();
+  }
+
   global.ShiftRender = {
     renderSummary: renderSummary,
     renderKeys: renderKeys,
     renderSettings: renderSettings,
+    renderChangelog: renderChangelog,
+    renderFeedback: renderFeedback,
   };
 })(typeof window !== "undefined" ? window : globalThis);

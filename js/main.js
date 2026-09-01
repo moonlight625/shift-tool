@@ -15,6 +15,123 @@
   var viewSettings = document.getElementById("view-settings");
   var printBtn = document.getElementById("print-btn");
   var reloadBtn = document.getElementById("reload-btn");
+  var feedbackBtn = document.getElementById("feedback-btn");
+  var currentModel = null; // フィードバックに店番を添えるために保持
+
+  // 更新履歴。UIに見える変更を入れたらエントリを追記してバージョンを上げる
+  // (普段の機能追加はマイナー、大きな機能はメジャーを上げる)。
+  // 既読管理は配列内の位置で比較するので、必ず古い→新しいの順に並べること
+  var CHANGELOG = [
+    {
+      version: "1.3",
+      date: "2026-09-01",
+      items: [
+        {
+          title: "設定は「設定」タブに集約しました",
+          body: "営業時間・鍵の本数・優先順位・月初の鍵の持ち主・鍵を持てる人は、右上の「設定」タブから変更できます。",
+        },
+        {
+          title: "開け閉めの分類は営業時間で決まるようになりました",
+          body: "設定タブで開店・閉店時刻を入れると、開店前に出勤する人=開け番、閉店後まで残る人=閉め番として自動分類されます。分類の一覧も設定タブで確認できます。",
+        },
+        {
+          title: "鍵受渡表の列を隠せるようになりました",
+          body: "各列の見出しにある目のアイコンを押すと、その列を隠せます(もう一度押すと戻ります)。表が横に長いときにお使いください。",
+        },
+        {
+          title: "警告のある日に「候補」ボタンが付きました",
+          body: "押すと、鍵を持てる人に追加すれば警告を減らせる人を提案します。そのまま追加もできます。",
+        },
+        {
+          title: "鍵の受け渡しを手動で調整できます",
+          body: "鍵のセルをクリックすると、その夜の持ち帰り先を指定できます(ピン留めされ、それ以降は自動で再計算)。",
+        },
+        {
+          title: "改善要望を送れるようになりました",
+          body: "ページ最下部の「改善要望を送る」から、開発者に直接要望を送れます。",
+        },
+      ],
+    },
+  ];
+  var SEEN_VERSION_KEY = "shift-tool-seen-version";
+
+  // 改善要望の送信先(Discord WebhookのURLパス部分をbase64で保持。
+  // 平文で置くとGitHubのシークレットスキャンで自動失効するため)。
+  // 空文字ならフィードバック機能は非表示
+  var FEEDBACK_WEBHOOK_B64 = "";
+
+  function feedbackWebhookUrl() {
+    if (!FEEDBACK_WEBHOOK_B64) return null;
+    try {
+      return "https://discord.com/api/webhooks/" + atob(FEEDBACK_WEBHOOK_B64);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function sendFeedback(text, name, model) {
+    var meta =
+      "改善要望 v" +
+      CHANGELOG[CHANGELOG.length - 1].version +
+      (model ? " / 店番:" + model.storeId : "") +
+      (name ? " / " + name : " / 匿名");
+    return fetch(feedbackWebhookUrl(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "📮 **" + meta + "**\n" + text }),
+    }).then(function (res) {
+      if (!res.ok) throw new Error("HTTP " + res.status);
+    });
+  }
+
+  // 未読の更新があればお知らせを表示する(ブラウザ単位で一度だけ)
+  function maybeShowChangelog() {
+    var latest = CHANGELOG[CHANGELOG.length - 1].version;
+    var seen = null;
+    try {
+      seen = localStorage.getItem(SEEN_VERSION_KEY);
+    } catch (e) {
+      return; // 保存できない環境では毎回出ても鬱陶しいので出さない
+    }
+    var markSeen = function () {
+      try {
+        localStorage.setItem(SEEN_VERSION_KEY, latest);
+      } catch (e) {
+        /* noop */
+      }
+    };
+    if (seen === latest) return;
+    if (seen === null) {
+      // 初めての人には「変更点」は意味がないので、既存ユーザー
+      // (何かしらの設定が保存されている人)にだけ表示する
+      var isExisting = false;
+      try {
+        for (var i = 0; i < localStorage.length; i++) {
+          var k = localStorage.key(i);
+          if (k && k.indexOf("shift-tool-") === 0 && k !== SEEN_VERSION_KEY) {
+            isExisting = true;
+            break;
+          }
+        }
+      } catch (e) {
+        /* noop */
+      }
+      if (!isExisting) {
+        markSeen();
+        return;
+      }
+    }
+    var seenIdx = -1;
+    CHANGELOG.forEach(function (entry, idx) {
+      if (entry.version === seen) seenIdx = idx;
+    });
+    var unread = CHANGELOG.slice(seenIdx + 1);
+    if (!unread.length) {
+      markSeen();
+      return;
+    }
+    ShiftRender.renderChangelog(unread, markSeen);
+  }
 
   // 設定はすべてCD(担当者番号)ベースでブラウザに保存する(名前は保存しない)。
   // 複数店舗で使えるよう、保存キーは店番でスコープする
@@ -125,6 +242,7 @@
     reader.onload = function (e) {
       try {
         var model = ShiftParser.parseWorkbook(new Uint8Array(e.target.result));
+        currentModel = model;
 
         var parts = model.month.split("-");
         monthLabel.textContent = parts[0] + "年" + Number(parts[1]) + "月のシフト";
@@ -255,6 +373,7 @@
 
         document.body.classList.add("loaded");
         appMain.hidden = false;
+        maybeShowChangelog();
       } catch (err) {
         showError("読み込みに失敗しました: " + err.message);
       }
@@ -314,6 +433,18 @@
 
   printBtn.addEventListener("click", function () {
     window.print();
+  });
+
+  // 改善要望(webhook未設定なら非表示)
+  if (!feedbackWebhookUrl()) {
+    feedbackBtn.hidden = true;
+  }
+  feedbackBtn.addEventListener("click", function () {
+    ShiftRender.renderFeedback({
+      onSend: function (text, name) {
+        return sendFeedback(text, name, currentModel);
+      },
+    });
   });
 
   reloadBtn.addEventListener("click", function () {
