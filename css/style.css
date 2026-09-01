@@ -649,6 +649,35 @@ tr.wd-sat .td-date { color: var(--sat); }
 
 .feedback-btns { display: flex; justify-content: flex-end; gap: 0.6rem; }
 
+.diag-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+  margin-bottom: 0.3rem;
+  cursor: pointer;
+}
+
+.diag-details { margin-bottom: 0.6rem; }
+
+.diag-details summary {
+  font-size: 0.85rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.diag-pre {
+  font-size: 0.78rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 0.7rem;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--muted);
+  margin: 0.3rem 0 0;
+}
+
 .footer-link {
   border: none;
   background: none;

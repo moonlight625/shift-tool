@@ -816,6 +816,24 @@
     ta.placeholder = "要望・困りごとを書いてください";
     panel.appendChild(ta);
 
+    // 状態情報の同送(中身を見せた上で外せるようにする)
+    var diagCheck = null;
+    if (opts.diagnostics) {
+      var diagRow = el("label", "diag-row");
+      diagCheck = document.createElement("input");
+      diagCheck.type = "checkbox";
+      diagCheck.checked = true;
+      diagRow.appendChild(diagCheck);
+      diagRow.appendChild(
+        el("span", null, "サイトの状態情報を一緒に送る(不具合の調査に役立ちます)")
+      );
+      panel.appendChild(diagRow);
+      var det = el("details", "diag-details");
+      det.appendChild(el("summary", null, "送られる状態情報を見る"));
+      det.appendChild(el("pre", "diag-pre", opts.diagnostics));
+      panel.appendChild(det);
+    }
+
     var status = el("p", "feedback-status");
     panel.appendChild(status);
 
@@ -832,7 +850,7 @@
       sendBtn.disabled = true;
       status.textContent = "送信中…";
       opts
-        .onSend(text, nameInput.value.trim())
+        .onSend(text, nameInput.value.trim(), !!(diagCheck && diagCheck.checked))
         .then(function () {
           status.textContent = "送信しました。ありがとうございます!";
           sendBtn.remove();

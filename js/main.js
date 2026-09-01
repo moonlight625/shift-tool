@@ -17,6 +17,9 @@
   var reloadBtn = document.getElementById("reload-btn");
   var feedbackBtn = document.getElementById("feedback-btn");
   var currentModel = null; // フィードバックに店番を添えるために保持
+  // フィードバックに添える診断情報を返す関数(ファイル読み込み時に設定される)。
+  // 個人情報(氏名・シフト内容)は絶対に含めないこと
+  var currentDiagnostics = null;
 
   // 更新履歴。UIに見える変更を入れたらエントリを追記してバージョンを上げる
   // (普段の機能追加はマイナー、大きな機能はメジャーを上げる)。
@@ -81,16 +84,18 @@
     }
   }
 
-  function sendFeedback(text, name, model) {
+  function sendFeedback(text, name, model, diagText) {
     var meta =
       "改善要望 v" +
       CHANGELOG[CHANGELOG.length - 1].version +
       (model ? " / 店番:" + model.storeId : "") +
       (name ? " / " + name : " / 匿名");
+    var content = "📮 **" + meta + "**\n" + text;
+    if (diagText) content += "\n```\n" + diagText + "\n```";
     return fetch(feedbackWebhookUrl(), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content: "📮 **" + meta + "**\n" + text }),
+      body: JSON.stringify({ content: content.slice(0, 1990) }),
     }).then(function (res) {
       if (!res.ok) throw new Error("HTTP " + res.status);
     });
@@ -383,6 +388,47 @@
         };
         renderAll();
 
+        // フィードバック用の診断情報(個人情報なし: 件数・設定値・環境のみ)
+        currentDiagnostics = function () {
+          var kd = ShiftKeys.analyzeKeys(model, days, {
+            numKeys: numKeys,
+            preferredCds: prefs,
+            overrides: overrides,
+            initialCds: initialCds,
+          });
+          var warn = kd.reduce(function (n, d) {
+            return n + d.warnings.length;
+          }, 0);
+          return [
+            model.month +
+              " / スタッフ" +
+              model.staff.length +
+              "人(鍵保持者" +
+              model.staff.filter(function (s) {
+                return s.isKeyHolder;
+              }).length +
+              "・うち追加" +
+              extraCds.length +
+              ")",
+            "営業時間 " + times.open + "-" + times.close + " / 鍵" + numKeys + "本 / 警告" + warn + "件",
+            "優先" +
+              prefs.length +
+              "人 / 月初指定" +
+              initialCds.filter(function (c) {
+                return c !== null && c !== undefined;
+              }).length +
+              " / 手動" +
+              Object.keys(overrides).length +
+              "件 / 非表示列: " +
+              (hiddenCols.join(",") || "なし"),
+            "未知記号: " +
+              (model.unknownCodes.join(",") || "なし") +
+              " / 簡易計算: " +
+              (kd.usedFallback ? "あり" : "なし"),
+            "画面 " + window.innerWidth + "x" + window.innerHeight + " / " + navigator.userAgent.slice(0, 90),
+          ].join("\n");
+        };
+
         document.body.classList.add("loaded");
         appMain.hidden = false;
         maybeShowChangelog();
@@ -452,9 +498,11 @@
     feedbackBtn.hidden = true;
   }
   feedbackBtn.addEventListener("click", function () {
+    var diagText = currentDiagnostics ? currentDiagnostics() : null;
     ShiftRender.renderFeedback({
-      onSend: function (text, name) {
-        return sendFeedback(text, name, currentModel);
+      diagnostics: diagText,
+      onSend: function (text, name, includeDiag) {
+        return sendFeedback(text, name, currentModel, includeDiag ? diagText : null);
       },
     });
   });
