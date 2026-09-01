@@ -62,9 +62,14 @@
     return total;
   }
 
-  // 「この人を追加すると警告が減る」候補を計算(実働の多い順・上位3件)
-  function computeSuggestions(model, days, keyOpts, minHours, currentWarnCount) {
-    if (currentWarnCount === 0) return [];
+  // 「この人を追加するとこの日の警告が減る」候補を計算。
+  // 実働≧閾値の非鍵保持者(実働の多い順に最大12人)をシミュレーションし、
+  // その日が直る人を優先して上位4件を返す
+  function computeDaySuggestions(model, days, keyOpts, minHours, dayIndex, currentKd) {
+    var dayBefore = currentKd[dayIndex].warnings.length;
+    var totalBefore = currentKd.reduce(function (n, d) {
+      return n + d.warnings.length;
+    }, 0);
     var results = [];
     model.staff.forEach(function (s) {
       if (s.isKeyHolder || !s.shifts.some(Boolean)) return;
@@ -80,14 +85,25 @@
       r.staff.isKeyHolder = true;
       var kd = ShiftKeys.analyzeKeys(model, days, keyOpts);
       r.staff.isKeyHolder = false;
-      var after = kd.reduce(function (n, d) {
+      var dayAfter = kd[dayIndex].warnings.length;
+      var totalAfter = kd.reduce(function (n, d) {
         return n + d.warnings.length;
       }, 0);
-      if (after < currentWarnCount) {
-        out.push({ staff: r.staff, hours: r.hours, before: currentWarnCount, after: after });
+      if (dayAfter < dayBefore || totalAfter < totalBefore) {
+        out.push({
+          staff: r.staff,
+          hours: r.hours,
+          dayFixed: dayAfter < dayBefore,
+          totalBefore: totalBefore,
+          totalAfter: totalAfter,
+        });
       }
     });
-    return out.slice(0, 3);
+    out.sort(function (a, b) {
+      if (a.dayFixed !== b.dayFixed) return a.dayFixed ? -1 : 1;
+      return b.hours - a.hours;
+    });
+    return out.slice(0, 4);
   }
 
   function showError(message) {
@@ -146,9 +162,6 @@
             initialCds: initialCds,
           };
           var keyDays = ShiftKeys.analyzeKeys(model, days, keyOpts);
-          var warnCount = keyDays.reduce(function (n, d) {
-            return n + d.warnings.length;
-          }, 0);
           ShiftRender.renderKeys(model, keyDays, viewKeys, {
             overrideCount: Object.keys(overrides).length,
             onOverride: function (dayIndex, keyIndex, cd) {
@@ -172,7 +185,9 @@
               saveJSON(keys.hiddenCols, cols);
               renderKeysView();
             },
-            suggestions: computeSuggestions(model, days, keyOpts, suggestHours, warnCount),
+            computeDaySuggestions: function (dayIndex) {
+              return computeDaySuggestions(model, days, keyOpts, suggestHours, dayIndex, keyDays);
+            },
             onAddKeyholder: function (cd) {
               extraCds = extraCds.concat([cd]);
               saveJSON(keys.extra, extraCds);

@@ -13,27 +13,27 @@
     <h1>シフトツール</h1>
     <span id="month-label" class="month-label"></span>
     <div class="header-actions">
-      <button id="print-btn" class="btn" hidden>🖨 印刷</button>
+      <button id="print-btn" class="btn" hidden><span class="msym">print</span> 印刷</button>
       <button id="reload-btn" class="btn btn-ghost">別のファイルを開く</button>
     </div>
   </header>
 
   <section id="upload-section" class="upload-section">
     <div id="dropzone" class="dropzone">
-      <div class="dropzone-icon">📂</div>
+      <div class="dropzone-icon"><span class="msym">upload_file</span></div>
       <p class="dropzone-main">ここにシフトのExcelファイルを<br>ドラッグ&ドロップ</p>
       <p class="dropzone-sub">またはクリックしてファイルを選択</p>
       <input type="file" id="file-input" accept=".xlsx,.xls" hidden>
     </div>
-    <p class="privacy-note">🔒 ファイルはこのブラウザの中だけで処理されます。データがどこかに送信されることはありません。</p>
+    <p class="privacy-note"><span class="msym">lock</span> ファイルはこのブラウザの中だけで処理されます。データがどこかに送信されることはありません。</p>
     <div id="error-box" class="banner banner-error" hidden></div>
   </section>
 
   <main id="app-main" hidden>
     <nav class="tabs">
-      <button class="tab active" data-view="summary">👥 人数の確認</button>
-      <button class="tab" data-view="keys">🔑 鍵の受け渡し</button>
-      <button class="tab tab-settings" data-view="settings">⚙ 設定</button>
+      <button class="tab active" data-view="summary"><span class="msym">groups</span> 人数の確認</button>
+      <button class="tab" data-view="keys"><span class="msym">key</span> 鍵の受け渡し</button>
+      <button class="tab tab-settings" data-view="settings"><span class="msym">settings</span> 設定</button>
     </nav>
     <section id="view-summary" class="view"></section>
     <section id="view-keys" class="view" hidden></section>

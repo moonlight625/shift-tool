@@ -14,6 +14,11 @@
     return node;
   }
 
+  // Material Symbols アイコン(リガチャ名で指定。vendorのサブセットに含まれるもののみ)
+  function icon(name, cls) {
+    return el("span", "msym" + (cls ? " " + cls : ""), name);
+  }
+
   function dayNum(date) {
     return date.getUTCDate();
   }
@@ -35,7 +40,7 @@
 
   function nameChip(entry) {
     var chip = el("span", "person" + (entry.staff.isKeyHolder ? " keyholder" : ""));
-    if (entry.staff.isKeyHolder) chip.appendChild(el("span", "key-mark", "🔑"));
+    if (entry.staff.isKeyHolder) chip.appendChild(icon("key", "key-mark"));
     chip.appendChild(el("span", "person-name", entry.staff.name));
     var time = entry.pattern
       ? entry.pattern.start + "–" + entry.pattern.end
@@ -57,7 +62,7 @@
           null,
           "パターン表にない記号があります(「その他」として数えています): " +
             model.unknownCodes.join("、") +
-            " — ⚙設定タブの分類一覧も確認してください"
+            " — 設定タブの分類一覧も確認してください"
         )
       );
       container.appendChild(warn);
@@ -154,8 +159,11 @@
 
   // ---------- 設定タブ ----------
 
-  function sectionHeading(parent, title, hint) {
-    parent.appendChild(el("h3", "settings-h", title));
+  function sectionHeading(parent, iconName, title, hint) {
+    var h = el("h3", "settings-h");
+    h.appendChild(icon(iconName));
+    h.appendChild(document.createTextNode(" " + title));
+    parent.appendChild(h);
     if (hint) parent.appendChild(el("p", "pref-hint", hint));
   }
 
@@ -174,7 +182,8 @@
     // --- 営業時間 ---
     sectionHeading(
       panel,
-      "🕙 営業時間",
+      "schedule",
+      "営業時間",
       "開け番=開店より前に出勤する人、閉め番=閉店より後まで残る人、として分類します。店舗に合わせて変更してください。"
     );
     var timesRow = el("div", "init-row");
@@ -199,7 +208,8 @@
     // --- シフト記号の分類プレビュー ---
     sectionHeading(
       panel,
-      "🏷 シフト記号の分類",
+      "sell",
+      "シフト記号の分類",
       "読み込んだマスタの全記号と、営業時間から決まった分類の一覧です(確認用)。"
     );
     var used = {};
@@ -238,17 +248,18 @@
     wrap2.appendChild(table);
     panel.appendChild(wrap2);
     if (model.unknownCodes.length) {
-      panel.appendChild(
-        el(
-          "p",
-          "pref-hint warn-text",
-          "⚠ マスタにない記号(その他として扱い中): " + model.unknownCodes.join("、")
+      var uk = el("p", "pref-hint warn-text");
+      uk.appendChild(icon("warning"));
+      uk.appendChild(
+        document.createTextNode(
+          " マスタにない記号(その他として扱い中): " + model.unknownCodes.join("、")
         )
       );
+      panel.appendChild(uk);
     }
 
     // --- 鍵の本数 ---
-    sectionHeading(panel, "🔑 鍵の本数", "店舗にある鍵の本数です。");
+    sectionHeading(panel, "key", "鍵の本数", "店舗にある鍵の本数です。");
     var numSel = document.createElement("select");
     for (var nk = 1; nk <= ShiftKeys.MAX_NUM_KEYS; nk++) {
       var op = document.createElement("option");
@@ -271,7 +282,8 @@
     // --- 優先順位 ---
     sectionHeading(
       panel,
-      "🥇 優先して鍵を持つ人",
+      "star",
+      "優先して鍵を持つ人",
       "チェックした順番が優先順位になります(①が最優先)。その人たちで回せない日だけ他の人に受け渡します。"
     );
     var list = el("div", "pref-list");
@@ -300,7 +312,8 @@
     // --- 月初の鍵の持ち主 ---
     sectionHeading(
       panel,
-      "🌅 月初(1日の朝)の鍵の持ち主",
+      "wb_twilight",
+      "月初(1日の朝)の鍵の持ち主",
       "前月末に誰が鍵を持ち帰ったかを入力すると、それを前提に計画します。(自動)なら最適な人を選びます。"
     );
     var initRow = el("div", "init-row");
@@ -333,7 +346,8 @@
     // --- 鍵を持てる人 ---
     sectionHeading(
       panel,
-      "🙋 鍵を持てる人",
+      "group_add",
+      "鍵を持てる人",
       "店長・リーダーは常に鍵を持てます。それ以外に鍵を持てる人がいれば追加してください。"
     );
     var holderRow = el("div", "pref-list");
@@ -382,7 +396,8 @@
     // --- サジェストの閾値 ---
     sectionHeading(
       panel,
-      "💡 追加候補のサジェスト",
+      "lightbulb",
+      "追加候補のサジェスト",
       "警告が残っているとき、追加すると警告が減る人を鍵ビューに提案します。月の実働がこの時間以上の人だけが候補になります(学生バイト除外用)。"
     );
     var hoursWrap = el("label", "init-item");
@@ -482,7 +497,7 @@
     };
     var name = function (s, cls) {
       var chip = el("span", "key-person " + (cls || ""));
-      if (pair.manual && s === pair.night) chip.appendChild(el("span", "key-pin", "📌"));
+      if (pair.manual && s === pair.night) chip.appendChild(icon("push_pin", "key-pin"));
       chip.appendChild(el("span", null, s.name));
       return chip;
     };
@@ -520,9 +535,13 @@
 
     if (keyDays.usedFallback) {
       var fb = el("div", "banner banner-warn");
-      fb.textContent =
-        "⚠ 組み合わせが多すぎるため、受け渡しの最適化を簡易計算に切り替えています。" +
-        "警告が実際より多く出ることがあります。「鍵を持てる人」か鍵の本数を減らすと正確になります。";
+      fb.appendChild(icon("warning"));
+      fb.appendChild(
+        document.createTextNode(
+          " 組み合わせが多すぎるため、受け渡しの最適化を簡易計算に切り替えています。" +
+            "警告が実際より多く出ることがあります。「鍵を持てる人」か鍵の本数を減らすと正確になります。"
+        )
+      );
       container.appendChild(fb);
     }
 
@@ -538,94 +557,169 @@
     );
     container.appendChild(intro);
 
-    // 表示列の切り替え + 手動変更リセット
-    var bar = el("div", "override-bar");
-    var toggles = el("span", "col-toggles");
-    toggles.appendChild(el("span", "col-toggles-label", "👁 表示:"));
-    [["open", "開け"], ["close", "閉め"], ["warn", "注意"]].forEach(function (c) {
-      var hidden = (opts.hiddenCols || []).indexOf(c[0]) !== -1;
-      var btn = el("button", "col-toggle" + (hidden ? " col-off" : ""), c[1]);
-      btn.addEventListener("click", function () {
-        var cols = (opts.hiddenCols || []).slice();
-        var idx = cols.indexOf(c[0]);
-        if (idx === -1) cols.push(c[0]);
-        else cols.splice(idx, 1);
-        opts.onHiddenColsChange(cols);
-      });
-      toggles.appendChild(btn);
-    });
-    bar.appendChild(toggles);
+    // 手動変更リセット
     if (opts.overrideCount > 0) {
-      bar.appendChild(el("span", null, "📌 手動変更 " + opts.overrideCount + "件"));
+      var bar = el("div", "override-bar");
+      var pinInfo = el("span");
+      pinInfo.appendChild(icon("push_pin"));
+      pinInfo.appendChild(document.createTextNode(" 手動変更 " + opts.overrideCount + "件"));
+      bar.appendChild(pinInfo);
       var resetBtn = el("button", "btn btn-ghost", "手動変更をすべてリセット");
       resetBtn.addEventListener("click", opts.onResetOverrides);
       bar.appendChild(resetBtn);
+      container.appendChild(bar);
     }
-    container.appendChild(bar);
 
-    // サジェスト
-    if (opts.suggestions && opts.suggestions.length) {
-      var sug = el("div", "banner suggest-box");
-      sug.appendChild(el("div", "suggest-title", "💡 鍵を持てる人を追加すると警告を減らせます:"));
-      opts.suggestions.forEach(function (sg) {
-        var row = el("div", "suggest-row");
-        row.appendChild(
-          el(
-            "span",
-            null,
-            sg.staff.name + "(月" + Math.round(sg.hours) + "h) — 警告 " + sg.before + "件 → " + sg.after + "件"
-          )
-        );
-        var add = el("button", "btn", "追加");
-        add.addEventListener("click", function () {
-          opts.onAddKeyholder(sg.staff.cd);
-        });
-        row.appendChild(add);
-        sug.appendChild(row);
+    // 列定義(日付以外は列見出しの目アイコンで隠せる)
+    var cols = [
+      { id: "open", label: "開け", cls: "th-open" },
+      { id: "close", label: "閉め", cls: "th-close" },
+    ];
+    for (var k = 0; k < numKeys; k++) {
+      cols.push({
+        id: "key" + k,
+        label: k === 0 ? "鍵1(店長キー)" : "鍵" + (k + 1),
+        cls: "th-key",
       });
-      container.appendChild(sug);
     }
+    cols.push({ id: "warn", label: "注意", cls: null });
+    var isHidden = function (id) {
+      return (opts.hiddenCols || []).indexOf(id) !== -1;
+    };
+    var toggleCol = function (id) {
+      var list = (opts.hiddenCols || []).slice();
+      var idx = list.indexOf(id);
+      if (idx === -1) list.push(id);
+      else list.splice(idx, 1);
+      opts.onHiddenColsChange(list);
+    };
 
     var wrap = el("div", "table-wrap");
     var table = el("table", "keys-table keys-main");
-    (opts.hiddenCols || []).forEach(function (c) {
-      table.classList.add("hide-" + c);
-    });
     var thead = el("thead");
     var hr = el("tr");
-    var addTh = function (text, col, cls) {
-      var th = el("th", cls || null, text);
-      if (col) th.setAttribute("data-col", col);
+    hr.appendChild(el("th", null, "日付"));
+    cols.forEach(function (c) {
+      var hidden = isHidden(c.id);
+      var th = el("th", hidden ? "th-collapsed" : c.cls);
+      var eye = el("button", "col-eye");
+      eye.appendChild(icon(hidden ? "visibility_off" : "visibility"));
+      eye.title = hidden ? c.label + "の列を表示" : c.label + "の列を隠す";
+      eye.addEventListener("click", function () {
+        toggleCol(c.id);
+      });
+      if (!hidden) th.appendChild(document.createTextNode(c.label + " "));
+      th.appendChild(eye);
       hr.appendChild(th);
-    };
-    addTh("日付");
-    addTh("開け", "open", "th-open");
-    addTh("閉め", "close", "th-close");
-    for (var k = 0; k < numKeys; k++) {
-      addTh(k === 0 ? "鍵1(店長キー)" : "鍵" + (k + 1), null, "th-key");
-    }
-    addTh("注意", "warn");
+    });
     thead.appendChild(hr);
     table.appendChild(thead);
+
+    var totalCols = cols.length + 1;
+
+    // 「候補を見る」行の開閉
+    var openSuggestRow = function (tr, dayIndex, day) {
+      var next = tr.nextSibling;
+      if (next && next.classList && next.classList.contains("suggest-tr")) {
+        next.remove();
+        return;
+      }
+      var str = el("tr", "suggest-tr");
+      var td = el("td", "suggest-td");
+      td.colSpan = totalCols;
+      var title = el("div", "suggest-title");
+      title.appendChild(icon("lightbulb"));
+      title.appendChild(
+        document.createTextNode(" " + fmtDate(day.date) + " の警告を減らせる追加候補:")
+      );
+      td.appendChild(title);
+      var list = opts.computeDaySuggestions ? opts.computeDaySuggestions(dayIndex) : [];
+      if (!list.length) {
+        td.appendChild(
+          el(
+            "div",
+            null,
+            "追加で解決できる人が見つかりません(シフト構成上の問題か、設定タブのサジェスト閾値が高すぎる可能性があります)。"
+          )
+        );
+      } else {
+        list.forEach(function (sg) {
+          var row = el("div", "suggest-row");
+          row.appendChild(
+            el(
+              "span",
+              null,
+              sg.staff.name +
+                "(月" +
+                Math.round(sg.hours) +
+                "h) — この日: " +
+                (sg.dayFixed ? "解消 ✓" : "変わらず") +
+                " / 月全体: " +
+                sg.totalBefore +
+                "件 → " +
+                sg.totalAfter +
+                "件"
+            )
+          );
+          var add = el("button", "btn", "鍵保持者に追加");
+          add.addEventListener("click", function () {
+            opts.onAddKeyholder(sg.staff.cd);
+          });
+          row.appendChild(add);
+          td.appendChild(row);
+        });
+      }
+      str.appendChild(td);
+      tr.parentNode.insertBefore(str, tr.nextSibling);
+    };
 
     var tbody = el("tbody");
     keyDays.forEach(function (day, dayIndex) {
       var tr = el("tr", wdClass(day.date));
       if (day.warnings.length) tr.classList.add("row-warn");
 
-      tr.appendChild(el("td", "td-date", fmtDate(day.date)));
-      tr.appendChild(holderCell(day.openHolders, true, "open"));
-      tr.appendChild(holderCell(day.closeHolders, true, "close"));
-      day.keys.forEach(function (pair, keyIndex) {
-        tr.appendChild(keyCell(pair, day, dayIndex, keyIndex, opts));
-      });
+      var dateTd = el("td", "td-date", fmtDate(day.date));
+      if (day.warnings.length && opts.computeDaySuggestions) {
+        var sugBtn = el("button", "suggest-open-btn");
+        sugBtn.appendChild(icon("lightbulb"));
+        sugBtn.appendChild(document.createTextNode("候補"));
+        sugBtn.title = "この日の警告を減らせる追加候補を見る";
+        sugBtn.addEventListener("click", function () {
+          openSuggestRow(tr, dayIndex, day);
+        });
+        dateTd.appendChild(el("br"));
+        dateTd.appendChild(sugBtn);
+      }
+      tr.appendChild(dateTd);
 
-      var warnTd = el("td", "td-warn");
-      warnTd.setAttribute("data-col", "warn");
-      day.warnings.forEach(function (w) {
-        warnTd.appendChild(el("div", "warn-text", "⚠ " + w));
+      var appendCol = function (id, buildTd) {
+        if (isHidden(id)) {
+          tr.appendChild(el("td", "th-collapsed"));
+        } else {
+          tr.appendChild(buildTd());
+        }
+      };
+      appendCol("open", function () {
+        return holderCell(day.openHolders, true, "open");
       });
-      tr.appendChild(warnTd);
+      appendCol("close", function () {
+        return holderCell(day.closeHolders, true, "close");
+      });
+      day.keys.forEach(function (pair, keyIndex) {
+        appendCol("key" + keyIndex, function () {
+          return keyCell(pair, day, dayIndex, keyIndex, opts);
+        });
+      });
+      appendCol("warn", function () {
+        var warnTd = el("td", "td-warn");
+        day.warnings.forEach(function (w) {
+          var line = el("div", "warn-text");
+          line.appendChild(icon("warning"));
+          line.appendChild(document.createTextNode(" " + w));
+          warnTd.appendChild(line);
+        });
+        return warnTd;
+      });
 
       tbody.appendChild(tr);
     });
