@@ -39,7 +39,7 @@
   var WARN_COST = 1e9; // 朝または夜に鍵が無い日
   var RANK_COST = 1e3; // 優先順位1つ下の人が1晩持つコスト
   var MOVE_COST = 1; // 受け渡し1回
-  var MAX_DP_HOLDERS = 10;
+  var MAX_DP_HOLDERS = 14; // これ以上は状態数が爆発するので貪欲法に切替(UIに警告表示)
 
   // 日ごとの基礎情報を前計算
   function buildDayInfo(days, keyholders) {
@@ -49,6 +49,11 @@
         list.forEach(function (e) {
           works[e.staff.cd] = true;
         });
+      });
+      // 会議・研修は開け閉めには数えないが店には居るので、鍵の受け渡しはできる
+      // (有給・応援などその他の「その他」は不在扱いのまま)
+      day.other.forEach(function (e) {
+        if (/^(会|研)/.test(e.code)) works[e.staff.cd] = true;
       });
       var openSet = {};
       day.open.forEach(function (e) {
@@ -348,8 +353,7 @@
     });
 
     var info = buildDayInfo(days, keyholders);
-    var plan =
-      optimalPlan(
+    var optimal = optimalPlan(
         keyholders,
         days,
         info,
@@ -359,7 +363,9 @@
         overrides,
         manager ? keyholders.indexOf(manager) : -1,
         initIdx
-      ) ||
+      );
+    var plan =
+      optimal ||
       greedyPlan(
         keyholders,
         days,
@@ -373,7 +379,7 @@
       );
 
     var holders = plan.initial;
-    return days.map(function (day, i) {
+    var result = days.map(function (day, i) {
       var inf = info[i];
       var pick = function (list) {
         return list.filter(function (e) {
@@ -437,6 +443,9 @@
         warnings: warnings,
       };
     });
+    // 最適化できず貪欲法に切り替えたことをUIに伝える
+    result.usedFallback = !optimal && keyholders.length > 0;
+    return result;
   }
 
   global.ShiftKeys = { analyzeKeys: analyzeKeys, NUM_KEYS: NUM_KEYS };

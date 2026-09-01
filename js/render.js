@@ -419,6 +419,14 @@
     );
     container.appendChild(intro);
 
+    if (keyDays.usedFallback) {
+      var fb = el("div", "banner banner-warn");
+      fb.textContent =
+        "⚠ 鍵を持てる人が15人以上いるため、受け渡しの最適化を簡易計算に切り替えています。" +
+        "警告が実際より多く出ることがあります。「鍵を持てる人」を14人以下に減らすと正確になります。";
+      container.appendChild(fb);
+    }
+
     if (opts.overrideCount > 0) {
       var bar = el("div", "override-bar");
       bar.appendChild(el("span", null, "📌 手動変更 " + opts.overrideCount + "件"));
