@@ -64,7 +64,7 @@
   //   2. ブラウザのコンソール(F12)で次を実行(webhooks/ より後ろだけを渡す):
   //        btoa("1234567890/AbCdEfGh...")
   //   3. 出てきた文字列を下に貼ってコミット&プッシュ
-  var FEEDBACK_WEBHOOK_B64 = "";
+  var FEEDBACK_WEBHOOK_B64 = "MTU0NDMyODc0MzE2NDU3OTg0MS9XeVZyZWhiU01OU1g4cWFFNXFtTm5MM05VQXRuZFYyVmZDX3p1OWdoRjJJSzRIUDdKd2cwakpucUtETG5YWVFXRFFjbg==";
 
   function feedbackWebhookUrl() {
     if (!FEEDBACK_WEBHOOK_B64) return null;
