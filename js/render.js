@@ -874,11 +874,105 @@
     ta.focus();
   }
 
+  // ---------- 使い方ガイド ----------
+
+  var HELP_SECTIONS = [
+    {
+      title: "基本の使い方",
+      lines: [
+        "シフトのExcelファイルを画面に置く(またはクリックで選択)だけで、集計と鍵の受け渡し表が表示されます。",
+        "データはすべてこのブラウザの中だけで処理され、外部には送信されません。",
+        "設定(営業時間・鍵の設定など)は店番ごとにこのブラウザへ保存され、翌月のファイルにも引き継がれます。別のパソコンには引き継がれません。",
+      ],
+    },
+    {
+      title: "「人数の確認」の見方",
+      lines: [
+        "カレンダーの各日に、超早(いる日のみ)・開=開け番・中=中番・閉=閉め番の人数が表示されます。",
+        "開け番か閉め番が0人の日は赤枠で警告されます。",
+        "日付をタップすると、その日の出勤者一覧が時間つきで表示されます。鍵のアイコンが付いている人は鍵を持てる人です。",
+      ],
+    },
+    {
+      title: "「鍵の受け渡し」の見方",
+      lines: [
+        "鍵1〜の列は「その夜、誰が鍵を持ち帰るか」の自動計算です。赤い日が最も少なくなるように月全体で最適化されています。",
+        "「A → B」は、その日の営業時間内にAからBへ鍵を渡してBが持ち帰る、という意味です。名前だけの日はその人が持ったまま。(自宅)は保持者が休みで鍵がその人の家にある日です。",
+        "赤い行は問題のある日です。「開け番の誰も鍵を持っていません」=朝、店を開ける人の手元に鍵がない。「閉め番の誰も〜」=夜、閉める人の手元に鍵が残らない。「開け番/閉め番に鍵を持てる人がいません」=そもそもその時間帯に店長・リーダー等がいない(シフト側の問題)。",
+        "赤い日の日付の下の「候補」ボタンを押すと、鍵を持てる人に追加すれば警告が減る人を提案します。",
+        "鍵のセルをクリックすると、その夜の持ち帰り先を手動で指定できます(ピン留めされ、以降の日は自動で再計算)。休みの人への店外受け渡しも選べます。",
+        "列の見出しにある目のアイコンで、列を隠したり戻したりできます。",
+        "右上の印刷ボタンで、バックヤード貼り出し用に表だけを印刷できます。",
+      ],
+    },
+    {
+      title: "「設定」の使い方",
+      lines: [
+        "営業時間: 開店前に出勤する人=開け番、閉店後まで残る人=閉め番、として分類します。店の営業時間に合わせて変更してください。",
+        "シフト記号の分類: 全記号がどう分類されたかの確認表です。おかしい記号があれば営業時間を調整してください。",
+        "鍵の本数: 店にある鍵の本数(1〜5本)。",
+        "優先して鍵を持つ人: チェックした順番が優先順位(①が最優先)になり、その人たちに鍵を集めます。",
+        "月初の鍵の持ち主: 前月末に誰が鍵を持ち帰ったかを入力すると、それを前提に計画します。",
+        "鍵を持てる人: 店長・リーダー以外で鍵を持てる人を追加できます。",
+        "追加候補のサジェスト: 「候補」ボタンの対象になる最低実働時間です(学生バイトなどを除外するため)。",
+      ],
+    },
+    {
+      title: "困ったら",
+      lines: [
+        "表示がおかしい・こうしてほしい、があればページ最下部の「改善要望を送る」から開発者に届きます。",
+        "更新があったときは、ファイルを読み込んだあとに一度だけお知らせが表示されます。",
+      ],
+    },
+  ];
+
+  function renderHelp() {
+    var overlay = el("div", "modal-overlay");
+    var panel = el("div", "modal-panel");
+
+    var close = function () {
+      overlay.remove();
+      document.removeEventListener("keydown", onKey);
+    };
+    var onKey = function (e) {
+      if (e.key === "Escape") close();
+    };
+
+    var h = el("h2", "modal-title");
+    h.appendChild(icon("help"));
+    h.appendChild(document.createTextNode(" 使い方・Tips"));
+    panel.appendChild(h);
+
+    HELP_SECTIONS.forEach(function (sec, i) {
+      var det = el("details", "help-section");
+      if (i === 0) det.open = true;
+      det.appendChild(el("summary", "help-summary", sec.title));
+      var ul = el("ul", "modal-list");
+      sec.lines.forEach(function (line) {
+        ul.appendChild(el("li", "help-line", line));
+      });
+      det.appendChild(ul);
+      panel.appendChild(det);
+    });
+
+    var okBtn = el("button", "btn modal-ok", "閉じる");
+    okBtn.addEventListener("click", close);
+    panel.appendChild(okBtn);
+
+    overlay.addEventListener("click", function (e) {
+      if (e.target === overlay) close();
+    });
+    document.addEventListener("keydown", onKey);
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+  }
+
   global.ShiftRender = {
     renderSummary: renderSummary,
     renderKeys: renderKeys,
     renderSettings: renderSettings,
     renderChangelog: renderChangelog,
     renderFeedback: renderFeedback,
+    renderHelp: renderHelp,
   };
 })(typeof window !== "undefined" ? window : globalThis);

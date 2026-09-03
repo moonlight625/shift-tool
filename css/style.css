@@ -103,6 +103,36 @@ body {
 
 body:not(.loaded) .header-actions { display: none; }
 
+.help-btn {
+  width: 2.2rem;
+  height: 2.2rem;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.15rem;
+  flex-shrink: 0;
+}
+
+.help-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+/* ファイル読み込み前はヘッダー右側のボタン群が消えるので、?を右端に寄せる */
+body:not(.loaded) .help-btn { margin-left: auto; }
+
+.help-section { margin-bottom: 0.5rem; }
+
+.help-summary {
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0.3rem 0;
+}
+
+.help-line { margin-bottom: 0.4rem; font-size: 0.95rem; }
+
 .btn {
   font-size: 1rem;
   padding: 0.5rem 1rem;
@@ -718,7 +748,7 @@ tr.wd-sat .td-date { color: var(--sat); }
 @media print {
   .site-header, .tabs, .upload-section, .hint, .keys-intro, .pref-panel,
   .override-bar, .key-select, .site-footer, .suggest-tr, .col-eye,
-  .suggest-open-btn, #view-settings, .modal-overlay { display: none !important; }
+  .suggest-open-btn, #view-settings, .modal-overlay, .help-btn { display: none !important; }
   body { background: #fff; }
   main { padding: 0; max-width: none; }
   #view-summary { display: none !important; }

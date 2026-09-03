@@ -16,6 +16,7 @@
   var printBtn = document.getElementById("print-btn");
   var reloadBtn = document.getElementById("reload-btn");
   var feedbackBtn = document.getElementById("feedback-btn");
+  var helpBtn = document.getElementById("help-btn");
   var currentModel = null; // フィードバックに店番を添えるために保持
   // フィードバックに添える診断情報を返す関数(ファイル読み込み時に設定される)。
   // 個人情報(氏名・シフト内容)は絶対に含めないこと
@@ -58,6 +59,16 @@
         {
           title: "改善要望を送れるようになりました",
           body: "ページ最下部の「改善要望を送る」から、開発者に直接要望を送れます。「こう使いたい」「ここが分かりにくい」など何でもどうぞ(スタッフの氏名などの個人情報は書かないでください)。",
+        },
+      ],
+    },
+    {
+      version: "1.5",
+      date: "2026-09-03",
+      items: [
+        {
+          title: "使い方ガイドを追加しました",
+          body: "画面右上の「?」ボタンから、各画面の見方や設定方法をいつでも確認できます。",
         },
       ],
     },
@@ -491,6 +502,10 @@
 
   printBtn.addEventListener("click", function () {
     window.print();
+  });
+
+  helpBtn.addEventListener("click", function () {
+    ShiftRender.renderHelp();
   });
 
   // 改善要望(webhook未設定なら非表示)
