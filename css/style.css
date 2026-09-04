@@ -743,18 +743,48 @@ tr.wd-sat .td-date { color: var(--sat); }
   .site-header h1 { font-size: 1.05rem; }
 }
 
+/* 印刷専用シート(画面では出さない) */
+.print-sheet { display: none; }
+
 /* ---------- 印刷(鍵受渡表を貼り出す用) ---------- */
+
+@page { margin: 10mm; }
 
 @media print {
   .site-header, .tabs, .upload-section, .hint, .keys-intro, .pref-panel,
   .override-bar, .key-select, .site-footer, .suggest-tr, .col-eye,
-  .suggest-open-btn, #view-settings, .modal-overlay, .help-btn { display: none !important; }
+  .suggest-open-btn, #view-settings, .modal-overlay, .help-btn,
+  .banner, .table-wrap { display: none !important; }
   body { background: #fff; }
   main { padding: 0; max-width: none; }
   #view-summary { display: none !important; }
   #view-keys { display: block !important; }
-  .keys-table { font-size: 11px; box-shadow: none; }
-  .keys-table th, .keys-table td { padding: 2px 4px; }
-  .row-warn { background: #f3f3f3 !important; }
-  .table-wrap { overflow: visible; }
+
+  /* 印刷は黒文字・太罫線の専用表だけを出す */
+  .print-sheet { display: block !important; }
+  .print-title {
+    margin: 0 0 8px;
+    font-size: 18px;
+    color: #000;
+  }
+  .print-table {
+    width: 100%;
+    border-collapse: collapse;
+    color: #000;
+    font-size: 13px;
+  }
+  .print-table th, .print-table td {
+    border: 1.3px solid #000;
+    padding: 2px 6px;
+    text-align: center;
+    font-weight: 700;
+    color: #000;
+  }
+  .print-table thead th { background: #e8e8e8; font-size: 14px; }
+  .print-table .print-date { white-space: nowrap; }
+  .print-note {
+    margin: 6px 0 0;
+    font-size: 10px;
+    color: #000;
+  }
 }

@@ -726,6 +726,50 @@
     table.appendChild(tbody);
     wrap.appendChild(table);
     container.appendChild(wrap);
+
+    // ---- 印刷専用の簡易表(日付・鍵ごとの苗字のみ。黒文字・太罫線) ----
+    var surname = function (s) {
+      return s ? s.name.split(/[ 　]/)[0] : "―";
+    };
+    var mp = model.month.split("-");
+    var sheet = el("div", "print-sheet");
+    sheet.appendChild(
+      el("h2", "print-title", "鍵受渡表 " + mp[0] + "年" + Number(mp[1]) + "月")
+    );
+    var pt = el("table", "print-table");
+    var pthead = el("thead");
+    var phr = el("tr");
+    phr.appendChild(el("th", null, "日付"));
+    for (var pk = 0; pk < numKeys; pk++) {
+      phr.appendChild(el("th", null, pk === 0 ? "鍵1(店長)" : "鍵" + (pk + 1)));
+    }
+    pthead.appendChild(phr);
+    pt.appendChild(pthead);
+    var ptbody = el("tbody");
+    keyDays.forEach(function (day) {
+      var tr = el("tr");
+      tr.appendChild(el("th", "print-date " + wdClass(day.date), fmtDate(day.date)));
+      day.keys.forEach(function (pair) {
+        var text;
+        if (!pair.morning && !pair.night) {
+          text = "―";
+        } else if (pair.morning === pair.night) {
+          text =
+            surname(pair.night) +
+            (day.offHolders.indexOf(pair.night) !== -1 ? "(宅)" : "");
+        } else {
+          text = surname(pair.morning) + "→" + surname(pair.night);
+        }
+        tr.appendChild(el("td", null, text));
+      });
+      ptbody.appendChild(tr);
+    });
+    pt.appendChild(ptbody);
+    sheet.appendChild(pt);
+    sheet.appendChild(
+      el("p", "print-note", "「A→B」=営業中にAからBへ受け渡し、Bが持ち帰り / (宅)=保持者が休みで鍵は自宅")
+    );
+    container.appendChild(sheet);
   }
 
   // ---------- 更新のお知らせ ----------
